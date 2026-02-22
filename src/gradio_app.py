@@ -18,6 +18,9 @@ CHUNK_HEADERS = [
     "token_count",
     "initial_rank",
     "rerank_score",
+    "sentence_window_score",
+    "auto_merged",
+    "merged_from_count",
 ]
 
 
@@ -39,6 +42,9 @@ def _chunk_rows(chunks: list | None) -> list[list]:
                 item.get("token_count"),
                 item.get("initial_rank"),
                 item.get("rerank_score"),
+                item.get("sentence_window_score"),
+                item.get("auto_merged"),
+                item.get("merged_from_count"),
             ]
         )
     return rows
@@ -49,6 +55,11 @@ def run_ask(
     top_k: int,
     candidate_k: int,
     use_rerank: bool,
+    use_auto_merging: bool,
+    auto_merge_max_gap: int,
+    auto_merge_max_chunks: int,
+    use_sentence_window: bool,
+    sentence_window_size: int,
     model: str,
     include_chunks: bool,
 ) -> tuple[str, str, list[list]]:
@@ -59,6 +70,11 @@ def run_ask(
                 top_k=int(top_k),
                 candidate_k=int(candidate_k),
                 use_rerank=use_rerank,
+                use_auto_merging=use_auto_merging,
+                auto_merge_max_gap=int(auto_merge_max_gap),
+                auto_merge_max_chunks=int(auto_merge_max_chunks),
+                use_sentence_window=use_sentence_window,
+                sentence_window_size=int(sentence_window_size),
                 model=model,
                 include_chunks=include_chunks,
             )
@@ -74,6 +90,11 @@ def run_ask(
         "top_k": response.top_k,
         "candidate_k": response.candidate_k,
         "use_rerank": response.use_rerank,
+        "use_auto_merging": response.use_auto_merging,
+        "auto_merge_max_gap": response.auto_merge_max_gap,
+        "auto_merge_max_chunks": response.auto_merge_max_chunks,
+        "use_sentence_window": response.use_sentence_window,
+        "sentence_window_size": response.sentence_window_size,
         "model": model,
     }
     rows = _chunk_rows(response.chunks) if include_chunks else []
@@ -85,6 +106,11 @@ def run_retrieve(
     top_k: int,
     candidate_k: int,
     use_rerank: bool,
+    use_auto_merging: bool,
+    auto_merge_max_gap: int,
+    auto_merge_max_chunks: int,
+    use_sentence_window: bool,
+    sentence_window_size: int,
 ) -> tuple[str, list[list]]:
     try:
         response = retrieve(
@@ -93,6 +119,11 @@ def run_retrieve(
                 top_k=int(top_k),
                 candidate_k=int(candidate_k),
                 use_rerank=use_rerank,
+                use_auto_merging=use_auto_merging,
+                auto_merge_max_gap=int(auto_merge_max_gap),
+                auto_merge_max_chunks=int(auto_merge_max_chunks),
+                use_sentence_window=use_sentence_window,
+                sentence_window_size=int(sentence_window_size),
             )
         )
     except HTTPException as exc:
@@ -105,6 +136,11 @@ def run_retrieve(
         "top_k": response.top_k,
         "candidate_k": response.candidate_k,
         "use_rerank": response.use_rerank,
+        "use_auto_merging": response.use_auto_merging,
+        "auto_merge_max_gap": response.auto_merge_max_gap,
+        "auto_merge_max_chunks": response.auto_merge_max_chunks,
+        "use_sentence_window": response.use_sentence_window,
+        "sentence_window_size": response.sentence_window_size,
     }
     return json.dumps(summary, indent=2), _chunk_rows(response.chunks)
 
@@ -130,7 +166,36 @@ def build_demo() -> gr.Blocks:
                     step=1,
                 )
             with gr.Row():
-                ask_use_rerank = gr.Checkbox(label="Use rerank", value=True)
+                ask_use_rerank = gr.Checkbox(label="Use rerank", value=False)
+                ask_use_auto_merging = gr.Checkbox(
+                    label="Use auto merging", value=False
+                )
+                ask_auto_merge_max_gap = gr.Slider(
+                    label="auto_merge_max_gap",
+                    minimum=0,
+                    maximum=5,
+                    value=1,
+                    step=1,
+                )
+                ask_auto_merge_max_chunks = gr.Slider(
+                    label="auto_merge_max_chunks",
+                    minimum=1,
+                    maximum=10,
+                    value=3,
+                    step=1,
+                )
+            with gr.Row():
+                ask_use_sentence_window = gr.Checkbox(
+                    label="Use sentence window", value=False
+                )
+                ask_sentence_window_size = gr.Slider(
+                    label="sentence_window_size",
+                    minimum=0,
+                    maximum=5,
+                    value=1,
+                    step=1,
+                )
+            with gr.Row():
                 ask_include_chunks = gr.Checkbox(label="Include chunks", value=False)
             ask_model = gr.Textbox(label="LLM model", value="gpt-4o-mini")
             ask_btn = gr.Button("Ask")
@@ -139,7 +204,19 @@ def build_demo() -> gr.Blocks:
             ask_meta = gr.Code(label="Metadata", language="json")
             ask_chunks = gr.Dataframe(
                 headers=CHUNK_HEADERS,
-                datatype=["str", "number", "str", "str", "number", "number", "number", "number"],
+                datatype=[
+                    "str",
+                    "number",
+                    "str",
+                    "str",
+                    "number",
+                    "number",
+                    "number",
+                    "number",
+                    "number",
+                    "bool",
+                    "number",
+                ],
                 label="Retrieved Chunks",
                 interactive=False,
             )
@@ -151,6 +228,11 @@ def build_demo() -> gr.Blocks:
                     ask_top_k,
                     ask_candidate_k,
                     ask_use_rerank,
+                    ask_use_auto_merging,
+                    ask_auto_merge_max_gap,
+                    ask_auto_merge_max_chunks,
+                    ask_use_sentence_window,
+                    ask_sentence_window_size,
                     ask_model,
                     ask_include_chunks,
                 ],
@@ -174,13 +256,54 @@ def build_demo() -> gr.Blocks:
                     value=12,
                     step=1,
                 )
-            retrieve_use_rerank = gr.Checkbox(label="Use rerank", value=True)
+            with gr.Row():
+                retrieve_use_rerank = gr.Checkbox(label="Use rerank", value=False)
+                retrieve_use_auto_merging = gr.Checkbox(
+                    label="Use auto merging", value=False
+                )
+                retrieve_auto_merge_max_gap = gr.Slider(
+                    label="auto_merge_max_gap",
+                    minimum=0,
+                    maximum=5,
+                    value=1,
+                    step=1,
+                )
+                retrieve_auto_merge_max_chunks = gr.Slider(
+                    label="auto_merge_max_chunks",
+                    minimum=1,
+                    maximum=10,
+                    value=3,
+                    step=1,
+                )
+            with gr.Row():
+                retrieve_use_sentence_window = gr.Checkbox(
+                    label="Use sentence window", value=False
+                )
+                retrieve_sentence_window_size = gr.Slider(
+                    label="sentence_window_size",
+                    minimum=0,
+                    maximum=5,
+                    value=1,
+                    step=1,
+                )
             retrieve_btn = gr.Button("Retrieve")
 
             retrieve_meta = gr.Code(label="Summary", language="json")
             retrieve_chunks = gr.Dataframe(
                 headers=CHUNK_HEADERS,
-                datatype=["str", "number", "str", "str", "number", "number", "number", "number"],
+                datatype=[
+                    "str",
+                    "number",
+                    "str",
+                    "str",
+                    "number",
+                    "number",
+                    "number",
+                    "number",
+                    "number",
+                    "bool",
+                    "number",
+                ],
                 label="Retrieved Chunks",
                 interactive=False,
             )
@@ -192,6 +315,11 @@ def build_demo() -> gr.Blocks:
                     retrieve_top_k,
                     retrieve_candidate_k,
                     retrieve_use_rerank,
+                    retrieve_use_auto_merging,
+                    retrieve_auto_merge_max_gap,
+                    retrieve_auto_merge_max_chunks,
+                    retrieve_use_sentence_window,
+                    retrieve_sentence_window_size,
                 ],
                 outputs=[retrieve_meta, retrieve_chunks],
             )

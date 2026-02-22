@@ -25,7 +25,12 @@ class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, description="User question.")
     top_k: int = Field(default=4, ge=1, le=20)
     candidate_k: int = Field(default=12, ge=1, le=100)
-    use_rerank: bool = True
+    use_rerank: bool = False
+    use_auto_merging: bool = False
+    auto_merge_max_gap: int = Field(default=1, ge=0, le=5)
+    auto_merge_max_chunks: int = Field(default=3, ge=1, le=10)
+    use_sentence_window: bool = False
+    sentence_window_size: int = Field(default=1, ge=0, le=5)
     model: str = "gpt-4o-mini"
     include_chunks: bool = False
 
@@ -34,7 +39,12 @@ class RetrieveRequest(BaseModel):
     question: str = Field(..., min_length=1, description="User question.")
     top_k: int = Field(default=4, ge=1, le=20)
     candidate_k: int = Field(default=12, ge=1, le=100)
-    use_rerank: bool = True
+    use_rerank: bool = False
+    use_auto_merging: bool = False
+    auto_merge_max_gap: int = Field(default=1, ge=0, le=5)
+    auto_merge_max_chunks: int = Field(default=3, ge=1, le=10)
+    use_sentence_window: bool = False
+    sentence_window_size: int = Field(default=1, ge=0, le=5)
 
 
 class ChunkResult(BaseModel):
@@ -46,6 +56,9 @@ class ChunkResult(BaseModel):
     token_count: int
     initial_rank: int | None = None
     rerank_score: float | None = None
+    sentence_window_score: float | None = None
+    auto_merged: bool | None = None
+    merged_from_count: int | None = None
 
 
 class RetrieveResponse(BaseModel):
@@ -53,6 +66,11 @@ class RetrieveResponse(BaseModel):
     top_k: int
     candidate_k: int
     use_rerank: bool
+    use_auto_merging: bool
+    auto_merge_max_gap: int
+    auto_merge_max_chunks: int
+    use_sentence_window: bool
+    sentence_window_size: int
     retrieved_count: int
     chunks: list[ChunkResult]
 
@@ -64,6 +82,11 @@ class AskResponse(BaseModel):
     top_k: int
     candidate_k: int
     use_rerank: bool
+    use_auto_merging: bool
+    auto_merge_max_gap: int
+    auto_merge_max_chunks: int
+    use_sentence_window: bool
+    sentence_window_size: int
     retrieved_count: int
     chunks: list[ChunkResult] | None = None
 
@@ -91,6 +114,9 @@ def _map_chunk(raw: dict) -> ChunkResult:
         token_count=int(meta["token_count"]),
         initial_rank=raw.get("initial_rank"),
         rerank_score=raw.get("rerank_score"),
+        sentence_window_score=raw.get("sentence_window_score"),
+        auto_merged=raw.get("auto_merged"),
+        merged_from_count=raw.get("merged_from_count"),
     )
 
 
@@ -130,6 +156,11 @@ def retrieve(payload: RetrieveRequest) -> RetrieveResponse:
             top_k=payload.top_k,
             candidate_k=payload.candidate_k,
             use_rerank=payload.use_rerank,
+            use_auto_merging=payload.use_auto_merging,
+            auto_merge_max_gap=payload.auto_merge_max_gap,
+            auto_merge_max_chunks=payload.auto_merge_max_chunks,
+            use_sentence_window=payload.use_sentence_window,
+            sentence_window_size=payload.sentence_window_size,
         )
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -142,6 +173,11 @@ def retrieve(payload: RetrieveRequest) -> RetrieveResponse:
         top_k=payload.top_k,
         candidate_k=payload.candidate_k,
         use_rerank=payload.use_rerank,
+        use_auto_merging=payload.use_auto_merging,
+        auto_merge_max_gap=payload.auto_merge_max_gap,
+        auto_merge_max_chunks=payload.auto_merge_max_chunks,
+        use_sentence_window=payload.use_sentence_window,
+        sentence_window_size=payload.sentence_window_size,
         retrieved_count=len(mapped),
         chunks=mapped,
     )
@@ -160,6 +196,11 @@ def ask(payload: AskRequest) -> AskResponse:
             top_k=payload.top_k,
             candidate_k=payload.candidate_k,
             use_rerank=payload.use_rerank,
+            use_auto_merging=payload.use_auto_merging,
+            auto_merge_max_gap=payload.auto_merge_max_gap,
+            auto_merge_max_chunks=payload.auto_merge_max_chunks,
+            use_sentence_window=payload.use_sentence_window,
+            sentence_window_size=payload.sentence_window_size,
             retrieved_count=0,
             chunks=[] if payload.include_chunks else None,
         )
@@ -170,6 +211,11 @@ def ask(payload: AskRequest) -> AskResponse:
             top_k=payload.top_k,
             candidate_k=payload.candidate_k,
             use_rerank=payload.use_rerank,
+            use_auto_merging=payload.use_auto_merging,
+            auto_merge_max_gap=payload.auto_merge_max_gap,
+            auto_merge_max_chunks=payload.auto_merge_max_chunks,
+            use_sentence_window=payload.use_sentence_window,
+            sentence_window_size=payload.sentence_window_size,
         )
         answer = _answer_with_chunks(question, chunks, payload.model)
     except ValueError as exc:
@@ -185,6 +231,11 @@ def ask(payload: AskRequest) -> AskResponse:
         top_k=payload.top_k,
         candidate_k=payload.candidate_k,
         use_rerank=payload.use_rerank,
+        use_auto_merging=payload.use_auto_merging,
+        auto_merge_max_gap=payload.auto_merge_max_gap,
+        auto_merge_max_chunks=payload.auto_merge_max_chunks,
+        use_sentence_window=payload.use_sentence_window,
+        sentence_window_size=payload.sentence_window_size,
         retrieved_count=len(mapped),
         chunks=mapped if payload.include_chunks else None,
     )
