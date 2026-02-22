@@ -27,6 +27,20 @@ From `data/eval/eval_results.jsonl` (latest run):
 - Failures: `0/30 (0.0%)`
 - Clarifying-question asked: `5/5 (100.0%)`
 
+## Screenshots
+
+### Gradio Ask
+
+![Gradio Ask](docs/images/gradio-ask.png)
+
+### Gradio Retrieve
+
+![Gradio Retrieve](docs/images/gradio-retrieve.png)
+
+### Eval Report
+
+![Eval Report](docs/images/eval-report.png)
+
 ## Project Structure
 
 ```text
@@ -135,20 +149,6 @@ Open: `http://127.0.0.1:7860`
 Tabs:
 - `Ask`: full QA flow
 - `Retrieve`: retrieval-only debugging view
-
-## Screenshots
-
-### Gradio Ask
-
-![Gradio Ask](docs/images/gradio-ask.png)
-
-### Gradio Retrieve
-
-![Gradio Retrieve](docs/images/gradio-retrieve.png)
-
-### Eval Report
-
-![Eval Report](docs/images/eval-report.png)
 
 ## Retrieval and Reranking
 
