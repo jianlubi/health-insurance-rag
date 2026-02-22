@@ -138,10 +138,17 @@ Tabs:
 
 ## Screenshots
 
-Add screenshots under `docs/images/` and reference them here, for example:
-- `docs/images/gradio-ask.png`
-- `docs/images/gradio-retrieve.png`
-- `docs/images/eval-report.png`
+### Gradio Ask
+
+![Gradio Ask](docs/images/gradio-ask.png)
+
+### Gradio Retrieve
+
+![Gradio Retrieve](docs/images/gradio-retrieve.png)
+
+### Eval Report
+
+![Eval Report](docs/images/eval-report.png)
 
 ## Retrieval and Reranking
 
