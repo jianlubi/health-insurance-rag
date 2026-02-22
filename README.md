@@ -41,6 +41,10 @@ From `data/eval/eval_results.jsonl` (latest run):
 
 ![Eval Report](docs/images/eval-report.png)
 
+### Retriever Comparison
+
+![Retriever Comparison](docs/images/retriever-comparison.png)
+
 ## Project Structure
 
 ```text
@@ -50,10 +54,15 @@ data/
   eval/                     # Eval questions + eval output JSONL
 notes/                      # Project notes and experiment logs
 src/
+  retrieval/
+    chunk_retriever.py      # Candidate chunk retrieval from pgvector
+    rerank_retriever.py     # Reranking logic
+    auto_merging_retriever.py  # Adjacent-chunk auto merge logic
+    sentence_window_retriever.py  # Sentence-window selection logic
   chunking.py               # Chunking logic
   ingest.py                 # Build chunks JSONL from policies
   index.py                  # Embed + index chunks into pgvector
-  retrieve.py               # Retrieval + reranking
+  retrieve.py               # Retrieval orchestrator
   ambiguity.py              # Ambiguity detection/clarification prompts
   answer.py                 # Single-question answer flow
   eval.py                   # Batch evaluator
@@ -156,7 +165,21 @@ Retrieval flow (`src/retrieve.py`):
 1. Embed query with `text-embedding-3-small`
 2. Fetch top candidates from pgvector (`candidate_k`, default 12)
 3. Optional rerank by query-chunk cosine similarity using `text-embedding-3-large`
-4. Return final top `k` (default 4)
+4. Optional auto-merging of adjacent chunks from the same source/section
+5. Optional sentence-window selection (score sentences per chunk, return windowed text around best sentence)
+6. Return final top `k` (default 4)
+
+Auto-merging controls:
+- `use_auto_merging` (default: `false`)
+- `auto_merge_max_gap` (default: `1`)
+- `auto_merge_max_chunks` (default: `3`)
+
+Sentence-window controls:
+- `use_sentence_window` (default: `false`)
+- `sentence_window_size` (default: `1`, meaning `best sentence +/- 1`)
+
+Rerank control:
+- `use_rerank` (default: `false`)
 
 ## Notes
 
