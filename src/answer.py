@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import argparse
 import os
-import sys
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
 from ambiguity import build_clarification_prompt, needs_clarification
+from config import get_config
 from retrieve import retrieve_chunks
 
 SYSTEM_PROMPT = (
@@ -32,8 +33,11 @@ def build_context(chunks: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
-def answer_question(question: str, *, top_k: int = 4) -> str:
+def answer_question(question: str, *, top_k: int | None = None) -> str:
     load_dotenv()
+    cfg = get_config()
+    retrieval_cfg = cfg["retrieval"]
+    models_cfg = cfg["models"]
 
     if needs_clarification(question):
         return build_clarification_prompt(question)
@@ -42,6 +46,7 @@ def answer_question(question: str, *, top_k: int = 4) -> str:
     if not openai_api_key:
         raise ValueError("OPENAI_API_KEY is required")
 
+    top_k = int(top_k if top_k is not None else retrieval_cfg["top_k"])
     chunks = retrieve_chunks(question, top_k=top_k)
     if not chunks:
         return "No relevant chunks found."
@@ -50,7 +55,7 @@ def answer_question(question: str, *, top_k: int = 4) -> str:
     client = OpenAI(api_key=openai_api_key)
 
     completion = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=str(models_cfg["answer_model"]),
         temperature=0,
         messages=[
             {
@@ -67,10 +72,24 @@ def answer_question(question: str, *, top_k: int = 4) -> str:
 
 
 def main() -> None:
-    default_question = "What illnesses are covered by this policy?"
-    question = " ".join(sys.argv[1:]).strip() if len(sys.argv) > 1 else default_question
+    cfg = get_config()
+    retrieval_cfg = cfg["retrieval"]
+    answer_cfg = cfg["answer"]
 
-    answer = answer_question(question, top_k=4)
+    parser = argparse.ArgumentParser(description="Ask one policy question.")
+    parser.add_argument("question", nargs="*", help="Question text.")
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=int(retrieval_cfg["top_k"]),
+        help="Number of chunks to retrieve.",
+    )
+    args = parser.parse_args()
+
+    default_question = str(answer_cfg["default_question"])
+    question = " ".join(args.question).strip() if args.question else default_question
+
+    answer = answer_question(question, top_k=max(1, args.top_k))
     print(f"Question: {question}\n")
     print("Answer:")
     print(answer)

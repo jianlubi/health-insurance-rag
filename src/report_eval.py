@@ -5,6 +5,8 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
+from config import get_config
+
 
 def pct(numerator: int, denominator: int) -> float:
     if denominator == 0:
@@ -157,10 +159,13 @@ def summarize(rows: list[dict]) -> None:
 
 
 def main() -> None:
+    cfg = get_config()
+    eval_cfg = cfg["eval"]
+
     parser = argparse.ArgumentParser(description="Summarize RAG eval results JSONL.")
     parser.add_argument(
         "--input",
-        default="data/eval/eval_results.jsonl",
+        default=str(eval_cfg["output_path"]),
         help="Path to eval results JSONL file.",
     )
     args = parser.parse_args()

@@ -7,6 +7,13 @@ from fastapi import HTTPException
 import gradio as gr
 
 from api import AskRequest, RetrieveRequest, ask, retrieve
+from config import get_config
+
+
+CFG = get_config()
+RETRIEVAL_CFG = CFG["retrieval"]
+MODELS_CFG = CFG["models"]
+GRADIO_CFG = CFG["gradio"]
 
 
 CHUNK_HEADERS = [
@@ -18,6 +25,7 @@ CHUNK_HEADERS = [
     "token_count",
     "initial_rank",
     "rerank_score",
+    "llm_rerank_rank",
     "sentence_window_score",
     "auto_merged",
     "merged_from_count",
@@ -42,6 +50,7 @@ def _chunk_rows(chunks: list | None) -> list[list]:
                 item.get("token_count"),
                 item.get("initial_rank"),
                 item.get("rerank_score"),
+                item.get("llm_rerank_rank"),
                 item.get("sentence_window_score"),
                 item.get("auto_merged"),
                 item.get("merged_from_count"),
@@ -55,6 +64,9 @@ def run_ask(
     top_k: int,
     candidate_k: int,
     use_rerank: bool,
+    use_llm_rerank: bool,
+    llm_rerank_candidate_k: int,
+    llm_rerank_keep_k: int,
     use_auto_merging: bool,
     auto_merge_max_gap: int,
     auto_merge_max_chunks: int,
@@ -70,6 +82,9 @@ def run_ask(
                 top_k=int(top_k),
                 candidate_k=int(candidate_k),
                 use_rerank=use_rerank,
+                use_llm_rerank=use_llm_rerank,
+                llm_rerank_candidate_k=int(llm_rerank_candidate_k),
+                llm_rerank_keep_k=int(llm_rerank_keep_k),
                 use_auto_merging=use_auto_merging,
                 auto_merge_max_gap=int(auto_merge_max_gap),
                 auto_merge_max_chunks=int(auto_merge_max_chunks),
@@ -90,6 +105,9 @@ def run_ask(
         "top_k": response.top_k,
         "candidate_k": response.candidate_k,
         "use_rerank": response.use_rerank,
+        "use_llm_rerank": response.use_llm_rerank,
+        "llm_rerank_candidate_k": response.llm_rerank_candidate_k,
+        "llm_rerank_keep_k": response.llm_rerank_keep_k,
         "use_auto_merging": response.use_auto_merging,
         "auto_merge_max_gap": response.auto_merge_max_gap,
         "auto_merge_max_chunks": response.auto_merge_max_chunks,
@@ -106,6 +124,9 @@ def run_retrieve(
     top_k: int,
     candidate_k: int,
     use_rerank: bool,
+    use_llm_rerank: bool,
+    llm_rerank_candidate_k: int,
+    llm_rerank_keep_k: int,
     use_auto_merging: bool,
     auto_merge_max_gap: int,
     auto_merge_max_chunks: int,
@@ -119,6 +140,9 @@ def run_retrieve(
                 top_k=int(top_k),
                 candidate_k=int(candidate_k),
                 use_rerank=use_rerank,
+                use_llm_rerank=use_llm_rerank,
+                llm_rerank_candidate_k=int(llm_rerank_candidate_k),
+                llm_rerank_keep_k=int(llm_rerank_keep_k),
                 use_auto_merging=use_auto_merging,
                 auto_merge_max_gap=int(auto_merge_max_gap),
                 auto_merge_max_chunks=int(auto_merge_max_chunks),
@@ -136,6 +160,9 @@ def run_retrieve(
         "top_k": response.top_k,
         "candidate_k": response.candidate_k,
         "use_rerank": response.use_rerank,
+        "use_llm_rerank": response.use_llm_rerank,
+        "llm_rerank_candidate_k": response.llm_rerank_candidate_k,
+        "llm_rerank_keep_k": response.llm_rerank_keep_k,
         "use_auto_merging": response.use_auto_merging,
         "auto_merge_max_gap": response.auto_merge_max_gap,
         "auto_merge_max_chunks": response.auto_merge_max_chunks,
@@ -157,47 +184,78 @@ def build_demo() -> gr.Blocks:
                 placeholder="e.g. What illnesses are covered by this policy?",
             )
             with gr.Row():
-                ask_top_k = gr.Slider(label="top_k", minimum=1, maximum=20, value=4, step=1)
+                ask_top_k = gr.Slider(
+                    label="top_k",
+                    minimum=1,
+                    maximum=20,
+                    value=int(RETRIEVAL_CFG["top_k"]),
+                    step=1,
+                )
                 ask_candidate_k = gr.Slider(
                     label="candidate_k",
                     minimum=1,
                     maximum=100,
-                    value=12,
+                    value=int(RETRIEVAL_CFG["candidate_k"]),
                     step=1,
                 )
             with gr.Row():
-                ask_use_rerank = gr.Checkbox(label="Use rerank", value=False)
+                ask_use_rerank = gr.Checkbox(
+                    label="Use rerank", value=bool(RETRIEVAL_CFG["use_rerank"])
+                )
+                ask_use_llm_rerank = gr.Checkbox(
+                    label="Use LLM rerank",
+                    value=bool(RETRIEVAL_CFG["use_llm_rerank"]),
+                )
+                ask_llm_rerank_candidate_k = gr.Slider(
+                    label="llm_rerank_candidate_k",
+                    minimum=1,
+                    maximum=50,
+                    value=int(RETRIEVAL_CFG["llm_rerank_candidate_k"]),
+                    step=1,
+                )
+                ask_llm_rerank_keep_k = gr.Slider(
+                    label="llm_rerank_keep_k",
+                    minimum=1,
+                    maximum=20,
+                    value=int(RETRIEVAL_CFG["llm_rerank_keep_k"]),
+                    step=1,
+                )
+            with gr.Row():
                 ask_use_auto_merging = gr.Checkbox(
-                    label="Use auto merging", value=False
+                    label="Use auto merging",
+                    value=bool(RETRIEVAL_CFG["use_auto_merging"]),
                 )
                 ask_auto_merge_max_gap = gr.Slider(
                     label="auto_merge_max_gap",
                     minimum=0,
                     maximum=5,
-                    value=1,
+                    value=int(RETRIEVAL_CFG["auto_merge_max_gap"]),
                     step=1,
                 )
                 ask_auto_merge_max_chunks = gr.Slider(
                     label="auto_merge_max_chunks",
                     minimum=1,
                     maximum=10,
-                    value=3,
+                    value=int(RETRIEVAL_CFG["auto_merge_max_chunks"]),
                     step=1,
                 )
             with gr.Row():
                 ask_use_sentence_window = gr.Checkbox(
-                    label="Use sentence window", value=False
+                    label="Use sentence window",
+                    value=bool(RETRIEVAL_CFG["use_sentence_window"]),
                 )
                 ask_sentence_window_size = gr.Slider(
                     label="sentence_window_size",
                     minimum=0,
                     maximum=5,
-                    value=1,
+                    value=int(RETRIEVAL_CFG["sentence_window_size"]),
                     step=1,
                 )
             with gr.Row():
                 ask_include_chunks = gr.Checkbox(label="Include chunks", value=False)
-            ask_model = gr.Textbox(label="LLM model", value="gpt-4o-mini")
+            ask_model = gr.Textbox(
+                label="LLM model", value=str(MODELS_CFG["answer_model"])
+            )
             ask_btn = gr.Button("Ask")
 
             ask_answer = gr.Textbox(label="Answer", lines=10)
@@ -209,6 +267,7 @@ def build_demo() -> gr.Blocks:
                     "number",
                     "str",
                     "str",
+                    "number",
                     "number",
                     "number",
                     "number",
@@ -228,6 +287,9 @@ def build_demo() -> gr.Blocks:
                     ask_top_k,
                     ask_candidate_k,
                     ask_use_rerank,
+                    ask_use_llm_rerank,
+                    ask_llm_rerank_candidate_k,
+                    ask_llm_rerank_keep_k,
                     ask_use_auto_merging,
                     ask_auto_merge_max_gap,
                     ask_auto_merge_max_chunks,
@@ -247,43 +309,70 @@ def build_demo() -> gr.Blocks:
             )
             with gr.Row():
                 retrieve_top_k = gr.Slider(
-                    label="top_k", minimum=1, maximum=20, value=4, step=1
+                    label="top_k",
+                    minimum=1,
+                    maximum=20,
+                    value=int(RETRIEVAL_CFG["top_k"]),
+                    step=1,
                 )
                 retrieve_candidate_k = gr.Slider(
                     label="candidate_k",
                     minimum=1,
                     maximum=100,
-                    value=12,
+                    value=int(RETRIEVAL_CFG["candidate_k"]),
                     step=1,
                 )
             with gr.Row():
-                retrieve_use_rerank = gr.Checkbox(label="Use rerank", value=False)
+                retrieve_use_rerank = gr.Checkbox(
+                    label="Use rerank", value=bool(RETRIEVAL_CFG["use_rerank"])
+                )
+                retrieve_use_llm_rerank = gr.Checkbox(
+                    label="Use LLM rerank",
+                    value=bool(RETRIEVAL_CFG["use_llm_rerank"]),
+                )
+                retrieve_llm_rerank_candidate_k = gr.Slider(
+                    label="llm_rerank_candidate_k",
+                    minimum=1,
+                    maximum=50,
+                    value=int(RETRIEVAL_CFG["llm_rerank_candidate_k"]),
+                    step=1,
+                )
+                retrieve_llm_rerank_keep_k = gr.Slider(
+                    label="llm_rerank_keep_k",
+                    minimum=1,
+                    maximum=20,
+                    value=int(RETRIEVAL_CFG["llm_rerank_keep_k"]),
+                    step=1,
+                )
+            with gr.Row():
                 retrieve_use_auto_merging = gr.Checkbox(
-                    label="Use auto merging", value=False
+                    label="Use auto merging",
+                    value=bool(RETRIEVAL_CFG["use_auto_merging"]),
                 )
                 retrieve_auto_merge_max_gap = gr.Slider(
                     label="auto_merge_max_gap",
                     minimum=0,
                     maximum=5,
-                    value=1,
+                    value=int(RETRIEVAL_CFG["auto_merge_max_gap"]),
                     step=1,
                 )
                 retrieve_auto_merge_max_chunks = gr.Slider(
                     label="auto_merge_max_chunks",
                     minimum=1,
                     maximum=10,
-                    value=3,
+                    value=int(RETRIEVAL_CFG["auto_merge_max_chunks"]),
                     step=1,
                 )
             with gr.Row():
                 retrieve_use_sentence_window = gr.Checkbox(
-                    label="Use sentence window", value=False
+                    label="Use sentence window",
+                    value=bool(RETRIEVAL_CFG["use_sentence_window"]),
                 )
                 retrieve_sentence_window_size = gr.Slider(
                     label="sentence_window_size",
                     minimum=0,
                     maximum=5,
-                    value=1,
+                    value=int(RETRIEVAL_CFG["sentence_window_size"]),
                     step=1,
                 )
             retrieve_btn = gr.Button("Retrieve")
@@ -296,6 +385,7 @@ def build_demo() -> gr.Blocks:
                     "number",
                     "str",
                     "str",
+                    "number",
                     "number",
                     "number",
                     "number",
@@ -315,6 +405,9 @@ def build_demo() -> gr.Blocks:
                     retrieve_top_k,
                     retrieve_candidate_k,
                     retrieve_use_rerank,
+                    retrieve_use_llm_rerank,
+                    retrieve_llm_rerank_candidate_k,
+                    retrieve_llm_rerank_keep_k,
                     retrieve_use_auto_merging,
                     retrieve_auto_merge_max_gap,
                     retrieve_auto_merge_max_chunks,
@@ -329,9 +422,13 @@ def build_demo() -> gr.Blocks:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Gradio UI for Health Insurance RAG.")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=7860)
-    parser.add_argument("--share", action="store_true")
+    parser.add_argument("--host", default=str(GRADIO_CFG["host"]))
+    parser.add_argument("--port", type=int, default=int(GRADIO_CFG["port"]))
+    parser.add_argument(
+        "--share",
+        action=argparse.BooleanOptionalAction,
+        default=bool(GRADIO_CFG["share"]),
+    )
     args = parser.parse_args()
 
     demo = build_demo()

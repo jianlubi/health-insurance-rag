@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,8 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import psycopg2
 from psycopg2.extras import execute_batch
+
+from config import get_config
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -87,6 +90,33 @@ def upsert_rows(cur, *, table_name: str, rows: list[tuple]) -> None:
 
 
 def main() -> None:
+    cfg = get_config()
+    index_cfg = cfg["index"]
+
+    parser = argparse.ArgumentParser(description="Embed and index chunks into pgvector.")
+    parser.add_argument(
+        "--input-path",
+        default=str(index_cfg["input_path"]),
+        help="Input chunk JSONL file path.",
+    )
+    parser.add_argument(
+        "--table-name",
+        default=str(index_cfg["table_name"]),
+        help="Target pgvector table name.",
+    )
+    parser.add_argument(
+        "--embedding-model",
+        default=str(index_cfg["embedding_model"]),
+        help="Embedding model for indexing.",
+    )
+    parser.add_argument(
+        "--embed-batch-size",
+        type=int,
+        default=int(index_cfg["embed_batch_size"]),
+        help="Batch size for embedding and upsert.",
+    )
+    args = parser.parse_args()
+
     load_dotenv()
 
     database_url = os.getenv("DATABASE_URL")
@@ -96,10 +126,10 @@ def main() -> None:
     if not openai_api_key:
         raise ValueError("OPENAI_API_KEY is required")
 
-    input_path = Path("data/chunks/policy_chunks.jsonl")
-    table_name = "policy_chunks"
-    embedding_model = "text-embedding-3-small"
-    embed_batch_size = 64
+    input_path = Path(args.input_path)
+    table_name = str(args.table_name)
+    embedding_model = str(args.embedding_model)
+    embed_batch_size = max(1, int(args.embed_batch_size))
 
     records = read_jsonl(input_path)
     if not records:

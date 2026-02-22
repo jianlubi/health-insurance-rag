@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
 from chunking import chunk_policy_file
+from config import get_config
 
 
 def build_records(
@@ -49,12 +51,51 @@ def write_jsonl(records: list[dict], output_path: Path) -> None:
 
 
 def main() -> None:
-    policies_dir = Path("data/policies")
-    output_path = Path("data/chunks/policy_chunks.jsonl")
-    chunk_size_tokens = 400
-    chunk_overlap_tokens = 80
-    min_chunk_tokens = 40
-    model_name = "text-embedding-3-small"
+    cfg = get_config()
+    ingest_cfg = cfg["ingest"]
+
+    parser = argparse.ArgumentParser(description="Build chunk JSONL from policy markdown.")
+    parser.add_argument(
+        "--policies-dir",
+        default=str(ingest_cfg["policies_dir"]),
+        help="Directory containing policy markdown files.",
+    )
+    parser.add_argument(
+        "--output-path",
+        default=str(ingest_cfg["output_path"]),
+        help="Output JSONL path for chunks.",
+    )
+    parser.add_argument(
+        "--chunk-size-tokens",
+        type=int,
+        default=int(ingest_cfg["chunk_size_tokens"]),
+        help="Maximum chunk size in tokens.",
+    )
+    parser.add_argument(
+        "--chunk-overlap-tokens",
+        type=int,
+        default=int(ingest_cfg["chunk_overlap_tokens"]),
+        help="Chunk overlap in tokens.",
+    )
+    parser.add_argument(
+        "--min-chunk-tokens",
+        type=int,
+        default=int(ingest_cfg["min_chunk_tokens"]),
+        help="Minimum chunk size in tokens.",
+    )
+    parser.add_argument(
+        "--model-name",
+        default=str(ingest_cfg["model_name"]),
+        help="Tokenizer model name used for token counting.",
+    )
+    args = parser.parse_args()
+
+    policies_dir = Path(args.policies_dir)
+    output_path = Path(args.output_path)
+    chunk_size_tokens = max(1, int(args.chunk_size_tokens))
+    chunk_overlap_tokens = max(0, int(args.chunk_overlap_tokens))
+    min_chunk_tokens = max(1, int(args.min_chunk_tokens))
+    model_name = str(args.model_name)
 
     records = build_records(
         policies_dir,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ from openai import OpenAI
 
 from answer import build_context
 from ambiguity import asked_clarifying_question, build_clarification_prompt
+from config import get_config
 from retrieve import retrieve_chunks
 
 
@@ -83,9 +85,10 @@ def ask_with_context(question: str, chunks: list[dict], client: OpenAI) -> str:
     if not chunks:
         return "No relevant chunks found."
 
+    models_cfg = get_config()["models"]
     context = build_context(chunks)
     completion = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=str(models_cfg["answer_model"]),
         temperature=0,
         messages=[
             {
@@ -188,16 +191,44 @@ def empty_category_stats() -> dict[str, int]:
 
 
 def main() -> None:
+    cfg = get_config()
+    eval_cfg = cfg["eval"]
+
+    parser = argparse.ArgumentParser(description="Run batch RAG evaluation.")
+    parser.add_argument(
+        "--questions-path",
+        default=str(eval_cfg["questions_path"]),
+        help="Path to eval question JSON file.",
+    )
+    parser.add_argument(
+        "--output-path",
+        default=str(eval_cfg["output_path"]),
+        help="Path to output JSONL results.",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=int(eval_cfg["top_k"]),
+        help="Number of retrieved chunks per answerable question.",
+    )
+    parser.add_argument(
+        "--max-questions",
+        type=int,
+        default=int(eval_cfg["max_questions"]),
+        help="Maximum number of questions to evaluate.",
+    )
+    args = parser.parse_args()
+
     load_dotenv()
 
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if not openai_api_key:
         raise ValueError("OPENAI_API_KEY is required")
 
-    questions_path = Path("data/eval/test_questions.json")
-    output_path = Path("data/eval/eval_results.jsonl")
-    top_k = 4
-    max_questions = 30
+    questions_path = Path(args.questions_path)
+    output_path = Path(args.output_path)
+    top_k = max(1, args.top_k)
+    max_questions = max(1, args.max_questions)
 
     questions = load_questions(questions_path, max_questions=max_questions)
     client = OpenAI(api_key=openai_api_key)
