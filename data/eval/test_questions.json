@@ -1,0 +1,244 @@
+[
+  {
+    "question": "When does my coverage actually kick in after I sign up?",
+    "expected_sections": [
+      "SECTION 1",
+      "SECTION 0"
+    ],
+    "category": "common",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If I get diagnosed during the waiting period but survive longer than 30 days, do I still get paid?",
+    "expected_sections": [
+      "SECTION 1",
+      "SECTION 4",
+      "SECTION 6"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "Am I covered for this?",
+    "expected_sections": [],
+    "category": "ambiguous",
+    "expected_behavior": "needs_clarification"
+  },
+  {
+    "question": "What if the insured dies 28 days after diagnosis?",
+    "expected_sections": [
+      "SECTION 1",
+      "SECTION 4"
+    ],
+    "category": "edge",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "What illnesses are included for a payout under this plan?",
+    "expected_sections": [
+      "SECTION 4"
+    ],
+    "category": "common",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "Can you tell me which hospitals near my ZIP code are in-network?",
+    "expected_sections": [],
+    "category": "not_available",
+    "expected_behavior": "not_available"
+  },
+  {
+    "question": "What do I need to send in to file a claim?",
+    "expected_sections": [
+      "SECTION 7"
+    ],
+    "category": "common",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If I already got a payout for early-stage cancer, how much is left if I later have a major cancer claim?",
+    "expected_sections": [
+      "SECTION 5"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "How long does claim processing usually take once you have everything?",
+    "expected_sections": [
+      "SECTION 7"
+    ],
+    "category": "common",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "How much would I get?",
+    "expected_sections": [],
+    "category": "ambiguous",
+    "expected_behavior": "needs_clarification"
+  },
+  {
+    "question": "What happens if I miss a premium payment?",
+    "expected_sections": [
+      "SECTION 3"
+    ],
+    "category": "common",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If the same illness comes back later, can I make another claim?",
+    "expected_sections": [
+      "SECTION 5"
+    ],
+    "category": "edge",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "Do I still have coverage during the grace period?",
+    "expected_sections": [
+      "SECTION 3"
+    ],
+    "category": "common",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "Can you project my exact premium for the next 10 years?",
+    "expected_sections": [],
+    "category": "not_available",
+    "expected_behavior": "not_available"
+  },
+  {
+    "question": "My policy lapsed, I reinstated it, and then got diagnosed shortly after. Does another waiting period apply?",
+    "expected_sections": [
+      "SECTION 3",
+      "SECTION 1",
+      "SECTION 4"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "Can I get my policy reinstated after it lapses, and what do you need from me?",
+    "expected_sections": [
+      "SECTION 3"
+    ],
+    "category": "common",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "They denied my claim. What can I do now?",
+    "expected_sections": [
+      "SECTION 8"
+    ],
+    "category": "ambiguous",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If I'm diagnosed with two covered illnesses close together, can both be paid?",
+    "expected_sections": [
+      "SECTION 5"
+    ],
+    "category": "edge",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "What are the most common reasons a claim gets denied?",
+    "expected_sections": [
+      "SECTION 6",
+      "SECTION 1",
+      "SECTION 7"
+    ],
+    "category": "common",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "What was your claim approval rate last year for this product?",
+    "expected_sections": [],
+    "category": "not_available",
+    "expected_behavior": "not_available"
+  },
+  {
+    "question": "If my claim is denied, how long do I have to appeal and what extra info should I include?",
+    "expected_sections": [
+      "SECTION 8",
+      "SECTION 7"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "What events make this policy end automatically?",
+    "expected_sections": [
+      "SECTION 9",
+      "SECTION 2"
+    ],
+    "category": "common",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "Can I get back on my plan?",
+    "expected_sections": [
+      "SECTION 3"
+    ],
+    "category": "ambiguous",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "What happens if the condition is tied to symptoms I had before coverage started but didn't report?",
+    "expected_sections": [
+      "SECTION 1",
+      "SECTION 6",
+      "SECTION 2"
+    ],
+    "category": "edge",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "How much does the policy pay if I'm diagnosed with a covered illness?",
+    "expected_sections": [
+      "SECTION 5",
+      "SECTION 0"
+    ],
+    "category": "common",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "Does this plan include gym reimbursement or wellness app benefits?",
+    "expected_sections": [],
+    "category": "not_available",
+    "expected_behavior": "not_available"
+  },
+  {
+    "question": "I paid late but still within the grace period, then got diagnosed before the next due date. Is that claim valid?",
+    "expected_sections": [
+      "SECTION 3",
+      "SECTION 4",
+      "SECTION 1"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "What else do you need from me to move this claim faster?",
+    "expected_sections": [
+      "SECTION 7"
+    ],
+    "category": "ambiguous",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If fraud is suspected while my claim is being reviewed, what happens next?",
+    "expected_sections": [
+      "SECTION 8",
+      "SECTION 9"
+    ],
+    "category": "edge",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "Can you compare this policy to two competitor plans and tell me which one is better for me?",
+    "expected_sections": [],
+    "category": "not_available",
+    "expected_behavior": "not_available"
+  }
+]
