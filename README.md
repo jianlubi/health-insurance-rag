@@ -15,6 +15,7 @@ The dataset in `data/policies/` is synthetic for demo/testing.
 - Vector or hybrid (vector + keyword) retrieval with optional embedding rerank + LLM rerank
 - Clarifying-question behavior for ambiguous prompts
 - Grounded answers with chunk-id citations
+- DB-backed premium rating service + tool/function calling for rate quotes
 - Batch evaluation + reporting scripts
 - API and UI for interactive usage
 
@@ -69,6 +70,8 @@ src/
   retrieve.py               # Retrieval orchestrator
   ambiguity.py              # Ambiguity detection/clarification prompts
   answer.py                 # Single-question answer flow
+  rate_service.py           # DB-backed premium rating logic
+  seed_rates.py             # Create/seed rate tables
   eval.py                   # Batch evaluator
   report_eval.py            # Eval summary report
   api.py                    # FastAPI service
@@ -80,6 +83,45 @@ src/
 - Python 3.11+ (tested in local `venv`)
 - PostgreSQL with `pgvector` extension
 - OpenAI API key
+
+## Docker (Recommended DB Setup)
+
+This repo includes `docker-compose.yml` for:
+- `postgres` (with `pgvector`)
+- `pgadmin` (web UI)
+
+Start services:
+
+```powershell
+docker compose up -d
+```
+
+Stop services:
+
+```powershell
+docker compose down
+```
+
+Default ports:
+- Postgres: `localhost:5433`
+- pgAdmin: `http://localhost:5050`
+
+Update `.env` for Docker Postgres:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5433/insurance_rag
+```
+
+pgAdmin login defaults (from compose):
+- Email: `admin@local.dev`
+- Password: `admin`
+
+When adding server in pgAdmin:
+- Host: `postgres`
+- Port: `5432`
+- Username: `postgres`
+- Password: `postgres`
+- Database: `insurance_rag`
 
 Install dependencies:
 
@@ -123,7 +165,13 @@ venv\Scripts\python src\ingest.py
 venv\Scripts\python src\index.py
 ```
 
-3. Ask one question via CLI:
+3. Create/seed DB rate tables (required for premium quotes):
+
+```powershell
+venv\Scripts\python src\seed_rates.py
+```
+
+4. Ask one question via CLI:
 
 ```powershell
 venv\Scripts\python src\answer.py "What illnesses are covered by this policy?"
@@ -135,7 +183,7 @@ Example with custom retrieval depth:
 venv\Scripts\python src\answer.py --top-k 6 "What illnesses are covered by this policy?"
 ```
 
-4. Run evaluation:
+5. Run evaluation:
 
 ```powershell
 venv\Scripts\python src\eval.py
@@ -162,11 +210,24 @@ Endpoints:
 - `GET /health`
 - `POST /retrieve`
 - `POST /ask`
+- `POST /rates/quote`
 
 Example:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/ask -Method Post -ContentType "application/json" -Body '{"question":"What are the main exclusions?"}'
+```
+
+Premium quote API example:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/rates/quote -Method Post -ContentType "application/json" -Body '{"age":42,"smoker":false,"riders":["early_stage_cancer"]}'
+```
+
+Tool-calling example via `/ask`:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/ask -Method Post -ContentType "application/json" -Body '{"question":"What is my monthly premium if I am 42, non-smoker, with early-stage cancer rider?"}'
 ```
 
 ## Gradio Frontend
