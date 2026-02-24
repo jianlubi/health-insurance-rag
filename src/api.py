@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
+import re
+from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -11,6 +14,12 @@ from ambiguity import build_clarification_prompt, needs_clarification
 from answer import SYSTEM_PROMPT, build_context
 from citation import ensure_chunk_citation
 from config import get_config
+from rate_service import (
+    BASE_BENEFIT_AMOUNT,
+    DEFAULT_POLICY_ID,
+    coerce_smoker,
+    get_rate_quote,
+)
 from retrieve import retrieve_chunks
 
 
@@ -18,11 +27,17 @@ load_dotenv()
 CFG = get_config()
 RETRIEVAL_CFG = CFG["retrieval"]
 MODELS_CFG = CFG["models"]
+_RATE_QUESTION_PATTERN = re.compile(
+    r"\b(premium|quote|cost|pricing|monthly payment|smoker|non-smoker|rider)\b",
+    re.IGNORECASE,
+)
 
 app = FastAPI(
     title="Health Insurance RAG API",
     version="0.1.0",
-    description="HTTP API for retrieval and question answering over policy documents.",
+    description=(
+        "HTTP API for retrieval-based policy Q&A and DB-backed premium rate quotes."
+    ),
 )
 
 
@@ -152,6 +167,30 @@ class AskResponse(BaseModel):
     chunks: list[ChunkResult] | None = None
 
 
+class RateQuoteRequest(BaseModel):
+    age: int = Field(..., ge=0)
+    smoker: bool
+    riders: list[str] = Field(default_factory=list)
+    benefit_amount: float = Field(default=float(BASE_BENEFIT_AMOUNT), gt=0)
+    policy_id: str = Field(default=DEFAULT_POLICY_ID, min_length=1)
+
+
+class RateQuoteResponse(BaseModel):
+    policy_id: str
+    age: int
+    smoker: bool
+    age_band: dict[str, int]
+    benefit_amount: float
+    base_monthly_rate: float
+    scaled_base_monthly_rate: float
+    applied_riders: list[dict[str, Any]]
+    unknown_riders: list[str]
+    total_loading_pct: float
+    monthly_premium: float
+    currency: str
+    assumptions: dict[str, Any]
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -185,32 +224,221 @@ def _map_chunk(raw: dict) -> ChunkResult:
     )
 
 
+def _should_use_rate_tool(question: str) -> bool:
+    return bool(_RATE_QUESTION_PATTERN.search(question))
+
+
 def _answer_with_chunks(question: str, chunks: list[dict], model: str) -> str:
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if not openai_api_key:
         raise ValueError("OPENAI_API_KEY is required")
 
-    if not chunks:
+    is_rate_question = _should_use_rate_tool(question)
+    if not chunks and not is_rate_question:
         return "No relevant chunks found."
 
-    context = build_context(chunks)
-    client = OpenAI(api_key=openai_api_key)
-    completion = client.chat.completions.create(
-        model=str(model),
-        temperature=0,
-        messages=[
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT,
-            },
-            {
-                "role": "user",
-                "content": f"Question:\n{question}\n\nContext:\n{context}",
-            },
-        ],
+    context = (
+        build_context(chunks)
+        if chunks
+        else "No policy context retrieved for this request."
     )
-    raw = completion.choices[0].message.content or ""
-    return ensure_chunk_citation(raw, chunks)
+    client = OpenAI(api_key=openai_api_key)
+    if not is_rate_question:
+        completion = client.chat.completions.create(
+            model=str(model),
+            temperature=0,
+            messages=[
+                {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT,
+                },
+                {
+                    "role": "user",
+                    "content": f"Question:\n{question}\n\nContext:\n{context}",
+                },
+            ],
+        )
+        raw = (completion.choices[0].message.content or "").strip()
+        return ensure_chunk_citation(raw, chunks)
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_rate_quote",
+                "description": (
+                    "Get a monthly premium quote from database rate tables "
+                    "using customer profile fields."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "age": {"type": "integer", "minimum": 0},
+                        "smoker": {
+                            "type": "string",
+                            "description": (
+                                "Smoking status. Use one of: smoker, non-smoker, "
+                                "true, false."
+                            ),
+                        },
+                        "riders": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "Selected riders. Example values: "
+                                "early_stage_cancer, return_of_premium."
+                            ),
+                        },
+                        "benefit_amount": {
+                            "type": "number",
+                            "minimum": 0.01,
+                            "description": (
+                                "Requested benefit amount. "
+                                f"Default is {int(BASE_BENEFIT_AMOUNT)}."
+                            ),
+                        },
+                        "policy_id": {
+                            "type": "string",
+                            "description": (
+                                "Policy id for rating tables. "
+                                f"Default is {DEFAULT_POLICY_ID}."
+                            ),
+                        },
+                    },
+                    "required": ["age", "smoker"],
+                },
+            },
+        }
+    ]
+
+    messages: list[dict[str, Any]] = [
+        {
+            "role": "system",
+            "content": (
+                SYSTEM_PROMPT
+                + " For premium/rate quote questions, you must call the "
+                "get_rate_quote function and use its result as the source of truth. "
+                "Do not compute premiums from the policy document text. "
+                f"If benefit amount is missing, assume {int(BASE_BENEFIT_AMOUNT)}. "
+                "If required rating inputs are missing, ask a concise follow-up question."
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"Question:\n{question}\n\nContext:\n{context}",
+        },
+    ]
+
+    tool_called = False
+    for _ in range(3):
+        completion = client.chat.completions.create(
+            model=str(model),
+            temperature=0,
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+        )
+        message = completion.choices[0].message
+
+        if not message.tool_calls:
+            raw = (message.content or "").strip()
+            if tool_called:
+                return raw
+            if raw:
+                return raw
+            return (
+                "I can provide a premium quote from the rating service, "
+                "but I need at least age and smoker status."
+            )
+
+        tool_calls_payload: list[dict[str, Any]] = []
+        for tool_call in message.tool_calls:
+            tool_calls_payload.append(
+                {
+                    "id": tool_call.id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments or "{}",
+                    },
+                }
+            )
+        messages.append(
+            {
+                "role": "assistant",
+                "content": message.content or "",
+                "tool_calls": tool_calls_payload,
+            }
+        )
+
+        for tool_call in message.tool_calls:
+            tool_name = tool_call.function.name
+            args_raw = tool_call.function.arguments or "{}"
+            try:
+                args = json.loads(args_raw)
+            except json.JSONDecodeError:
+                args = {}
+
+            if tool_name != "get_rate_quote":
+                tool_result: dict[str, Any] = {
+                    "error": f"unsupported tool '{tool_name}'"
+                }
+            else:
+                try:
+                    age = int(args["age"])
+                    smoker = coerce_smoker(args["smoker"])
+                    riders_raw = args.get("riders", [])
+                    if isinstance(riders_raw, str):
+                        riders = [riders_raw]
+                    elif isinstance(riders_raw, list):
+                        riders = [str(item) for item in riders_raw]
+                    else:
+                        raise ValueError("riders must be a list of strings")
+                    benefit_amount = float(
+                        args.get("benefit_amount", BASE_BENEFIT_AMOUNT)
+                    )
+                    policy_id = str(args.get("policy_id", DEFAULT_POLICY_ID))
+                    tool_result = get_rate_quote(
+                        age=age,
+                        smoker=smoker,
+                        riders=riders,
+                        benefit_amount=benefit_amount,
+                        policy_id=policy_id,
+                    )
+                except KeyError:
+                    tool_result = {
+                        "error": "missing required inputs: age and smoker are required"
+                    }
+                except Exception as exc:
+                    tool_result = {"error": str(exc)}
+
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": json.dumps(tool_result),
+                }
+            )
+            tool_called = True
+
+    return "I could not complete the rate lookup. Please try again."
+
+
+@app.post("/rates/quote", response_model=RateQuoteResponse)
+def quote_rate(payload: RateQuoteRequest) -> RateQuoteResponse:
+    try:
+        quote = get_rate_quote(
+            age=payload.age,
+            smoker=payload.smoker,
+            riders=payload.riders,
+            benefit_amount=payload.benefit_amount,
+            policy_id=payload.policy_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"rate quote failed: {exc}") from exc
+    return RateQuoteResponse(**quote)
 
 
 @app.post("/retrieve", response_model=RetrieveResponse)
@@ -266,6 +494,7 @@ def retrieve(payload: RetrieveRequest) -> RetrieveResponse:
 @app.post("/ask", response_model=AskResponse)
 def ask(payload: AskRequest) -> AskResponse:
     question = _validate_question(payload.question)
+    is_rate_question = _should_use_rate_tool(question)
 
     if needs_clarification(question):
         answer = build_clarification_prompt(question)
@@ -293,24 +522,27 @@ def ask(payload: AskRequest) -> AskResponse:
         )
 
     try:
-        chunks = retrieve_chunks(
-            question,
-            top_k=payload.top_k,
-            candidate_k=payload.candidate_k,
-            use_hybrid_search=payload.use_hybrid_search,
-            keyword_candidate_k=payload.keyword_candidate_k,
-            hybrid_alpha=payload.hybrid_alpha,
-            hybrid_rrf_k=payload.hybrid_rrf_k,
-            use_rerank=payload.use_rerank,
-            use_llm_rerank=payload.use_llm_rerank,
-            llm_rerank_candidate_k=payload.llm_rerank_candidate_k,
-            llm_rerank_keep_k=payload.llm_rerank_keep_k,
-            use_auto_merging=payload.use_auto_merging,
-            auto_merge_max_gap=payload.auto_merge_max_gap,
-            auto_merge_max_chunks=payload.auto_merge_max_chunks,
-            use_sentence_window=payload.use_sentence_window,
-            sentence_window_size=payload.sentence_window_size,
-        )
+        if is_rate_question:
+            chunks: list[dict] = []
+        else:
+            chunks = retrieve_chunks(
+                question,
+                top_k=payload.top_k,
+                candidate_k=payload.candidate_k,
+                use_hybrid_search=payload.use_hybrid_search,
+                keyword_candidate_k=payload.keyword_candidate_k,
+                hybrid_alpha=payload.hybrid_alpha,
+                hybrid_rrf_k=payload.hybrid_rrf_k,
+                use_rerank=payload.use_rerank,
+                use_llm_rerank=payload.use_llm_rerank,
+                llm_rerank_candidate_k=payload.llm_rerank_candidate_k,
+                llm_rerank_keep_k=payload.llm_rerank_keep_k,
+                use_auto_merging=payload.use_auto_merging,
+                auto_merge_max_gap=payload.auto_merge_max_gap,
+                auto_merge_max_chunks=payload.auto_merge_max_chunks,
+                use_sentence_window=payload.use_sentence_window,
+                sentence_window_size=payload.sentence_window_size,
+            )
         answer = _answer_with_chunks(question, chunks, payload.model)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
