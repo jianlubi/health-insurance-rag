@@ -12,7 +12,7 @@ The dataset in `data/policies/` is synthetic for demo/testing.
 ## Features
 
 - Section-aware markdown chunking
-- Vector retrieval with optional embedding rerank + LLM rerank
+- Vector or hybrid (vector + keyword) retrieval with optional embedding rerank + LLM rerank
 - Clarifying-question behavior for ambiguous prompts
 - Grounded answers with chunk-id citations
 - Batch evaluation + reporting scripts
@@ -58,7 +58,7 @@ notes/                      # Project notes and experiment logs
 src/
   config.py                 # Config loader + defaults + deep merge
   retrieval/
-    chunk_retriever.py      # Candidate chunk retrieval from pgvector
+    chunk_retriever.py      # Vector/keyword candidate retrieval + hybrid fusion
     rerank_retriever.py     # Reranking logic
     llm_rerank_retriever.py # LLM-based reranking logic
     auto_merging_retriever.py  # Adjacent-chunk auto merge logic
@@ -94,6 +94,7 @@ Create `.env` in project root:
 ```env
 OPENAI_API_KEY=your_openai_api_key
 DATABASE_URL=postgresql://user:password@host:5432/dbname
+REDIS_URL=redis://127.0.0.1:6379/0
 ```
 
 ## Configuration (YAML)
@@ -186,12 +187,19 @@ Tabs:
 
 Retrieval flow (`src/retrieve.py`):
 1. Embed query with `text-embedding-3-small`
-2. Fetch top candidates from pgvector (`candidate_k`, default 12)
-3. Optional rerank by query-chunk cosine similarity using `text-embedding-3-large`
-4. Optional LLM rerank on top candidates (default model `gpt-4o-mini`)
-5. Optional auto-merging of adjacent chunks from the same source/section
-6. Optional sentence-window selection (score sentences per chunk, return windowed text around best sentence)
-7. Return final top `k` (default 4)
+2. Fetch candidates from pgvector (`candidate_k`, default 12)
+3. Optional hybrid mode: fetch keyword candidates and fuse vector + keyword ranks with RRF
+4. Optional rerank by query-chunk cosine similarity using `text-embedding-3-large`
+5. Optional LLM rerank on top candidates (default model `gpt-4o-mini`)
+6. Optional auto-merging of adjacent chunks from the same source/section
+7. Optional sentence-window selection (score sentences per chunk, return windowed text around best sentence)
+8. Return final top `k` (default 4)
+
+Hybrid search controls:
+- `use_hybrid_search` (default: `false`)
+- `keyword_candidate_k` (default: `12`)
+- `hybrid_alpha` (default: `0.7`, vector-weight in RRF blend)
+- `hybrid_rrf_k` (default: `60`)
 
 Auto-merging controls:
 - `use_auto_merging` (default: `false`)
@@ -211,6 +219,16 @@ LLM rerank controls:
 - `llm_rerank_keep_k` (default: `4`)
 
 All default values above come from `config/config.yaml`.
+
+Query-embedding cache (Redis):
+- `cache.enabled` (default: `true`)
+- `cache.backend` (default: `redis`)
+- `cache.redis_url` (default: `redis://127.0.0.1:6379/0`)
+- `cache.embedding_ttl_seconds` (default: `86400`)
+- `cache.retrieval_enabled` (default: `true`)
+- `cache.retrieval_ttl_seconds` (default: `300`)
+- `cache.retrieval_version` (default: `v1`, bump to invalidate retrieval cache)
+- `cache.key_prefix` (default: `health_rag`)
 
 ## Notes
 

@@ -3,14 +3,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 from pathlib import Path
-import re
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
 from answer import build_context
 from ambiguity import asked_clarifying_question, build_clarification_prompt
+from citation import ensure_chunk_citation, has_chunk_citation
 from config import get_config
 from retrieve import retrieve_chunks
 
@@ -97,6 +98,7 @@ def ask_with_context(question: str, chunks: list[dict], client: OpenAI) -> str:
                     "You answer insurance-policy questions using ONLY the provided context. "
                     "If context is insufficient, say so clearly. "
                     "Cite chunk ids in square brackets like [demolife_critical_illness_policy.md:3]. "
+                    "Citations must use exactly one colon and integer chunk index. "
                     "Do not cite section clause numbers like [demolife_critical_illness_policy.md:3.2]."
                 ),
             },
@@ -106,7 +108,8 @@ def ask_with_context(question: str, chunks: list[dict], client: OpenAI) -> str:
             },
         ],
     )
-    return completion.choices[0].message.content or ""
+    raw = completion.choices[0].message.content or ""
+    return ensure_chunk_citation(raw, chunks)
 
 
 def write_jsonl(rows: list[dict], output_path: Path) -> None:
@@ -119,7 +122,7 @@ def write_jsonl(rows: list[dict], output_path: Path) -> None:
 def has_citation(answer: str) -> bool:
     # Accept chunk-id citations (":3") and clause-style citations (":3.2").
     # This keeps groundedness robust to minor output formatting variance.
-    return bool(re.search(r"\[[^\]]+\.md:\d+(?:\.\d+)?\]", answer))
+    return has_chunk_citation(answer)
 
 
 def is_insufficient_context(answer: str) -> bool:
@@ -136,6 +139,9 @@ def is_insufficient_context(answer: str) -> bool:
         "does not specify",
         "doesn't specify",
         "not enough information",
+        "does not provide enough information",
+        "doesn't provide enough information",
+        "not enough context",
         "not provided in the context",
         "not in the context",
         "cannot answer",
@@ -178,6 +184,8 @@ def empty_category_stats() -> dict[str, int]:
         "retrieval_hits": 0,
         "grounded_checks": 0,
         "grounded": 0,
+        "answer_relevance_checks": 0,
+        "answer_relevance_hits": 0,
         "insufficient_context": 0,
         "failure": 0,
         "clarification_needed": 0,
@@ -238,6 +246,8 @@ def main() -> None:
     retrieval_hits = 0
     grounded_checks = 0
     grounded_answers = 0
+    answer_relevance_checks = 0
+    answer_relevance_hits = 0
     insufficient_context_count = 0
     failures = 0
     clarification_needed_count = 0
@@ -263,17 +273,30 @@ def main() -> None:
         failure = False
         asked_for_clarification = False
         error_message: str | None = None
+        retrieval_latency_ms: float | None = None
+        total_latency_ms: float | None = None
+        retrieval_cache_hit: bool | None = None
+        question_start = time.perf_counter()
         try:
             if clarification_needed:
                 answer = build_clarification_prompt(question)
                 asked_for_clarification = asked_clarifying_question(answer)
             else:
-                chunks = retrieve_chunks(question, top_k=top_k)
+                retrieval_start = time.perf_counter()
+                chunks, retrieval_meta = retrieve_chunks(
+                    question,
+                    top_k=top_k,
+                    return_meta=True,
+                )
+                retrieval_latency_ms = (time.perf_counter() - retrieval_start) * 1000.0
+                retrieval_cache_hit = retrieval_meta.get("retrieval_cache_hit")
                 answer = ask_with_context(question, chunks, client)
         except Exception as exc:
             failure = True
             error_message = f"{type(exc).__name__}: {exc}"
             answer = f"System failure during evaluation. {error_message}"
+        finally:
+            total_latency_ms = (time.perf_counter() - question_start) * 1000.0
 
         hit = (
             None
@@ -294,6 +317,11 @@ def main() -> None:
             if clarification_needed
             else (not failure) and is_insufficient_context(answer)
         )
+        answer_relevance = (
+            (not insufficient_context)
+            if (not failure) and (not is_unanswerable_expected)
+            else None
+        )
 
         if hit is not None:
             retrieval_checks += 1
@@ -303,6 +331,10 @@ def main() -> None:
             grounded_checks += 1
             if grounded:
                 grounded_answers += 1
+        if answer_relevance is not None:
+            answer_relevance_checks += 1
+            if answer_relevance:
+                answer_relevance_hits += 1
         if insufficient_context:
             insufficient_context_count += 1
         if failure:
@@ -335,6 +367,10 @@ def main() -> None:
             stats["grounded_checks"] += 1
             if grounded:
                 stats["grounded"] += 1
+        if answer_relevance is not None:
+            stats["answer_relevance_checks"] += 1
+            if answer_relevance:
+                stats["answer_relevance_hits"] += 1
         if insufficient_context:
             stats["insufficient_context"] += 1
         if failure:
@@ -378,6 +414,18 @@ def main() -> None:
                 "metrics": {
                     "retrieval_hit": hit,
                     "grounded": grounded,
+                    "answer_relevance": answer_relevance,
+                    "retrieval_latency_ms": (
+                        round(retrieval_latency_ms, 2)
+                        if retrieval_latency_ms is not None
+                        else None
+                    ),
+                    "total_latency_ms": (
+                        round(total_latency_ms, 2)
+                        if total_latency_ms is not None
+                        else None
+                    ),
+                    "retrieval_cache_hit": retrieval_cache_hit,
                     "insufficient_context": insufficient_context,
                     "clarification_needed": clarification_needed,
                     "asked_clarifying_question": asked_for_clarification,
@@ -397,6 +445,10 @@ def main() -> None:
     print(
         f"Grounding rate: {grounded_answers}/{grounded_checks} "
         f"({pct(grounded_answers, grounded_checks):.1f}%)"
+    )
+    print(
+        f"Answer relevance rate: {answer_relevance_hits}/{answer_relevance_checks} "
+        f"({pct(answer_relevance_hits, answer_relevance_checks):.1f}%)"
     )
     print(
         f"Insufficient-context rate: {insufficient_context_count}/{len(questions)} "
@@ -434,6 +486,9 @@ def main() -> None:
             f"({pct(stats['retrieval_hits'], stats['retrieval_checks']):.1f}%), "
             f"grounded {stats['grounded']}/{stats['grounded_checks']} "
             f"({pct(stats['grounded'], stats['grounded_checks']):.1f}%), "
+            f"answer relevance {stats['answer_relevance_hits']}/"
+            f"{stats['answer_relevance_checks']} "
+            f"({pct(stats['answer_relevance_hits'], stats['answer_relevance_checks']):.1f}%), "
             f"insufficient {stats['insufficient_context']}/{stats['total']} "
             f"({pct(stats['insufficient_context'], stats['total']):.1f}%), "
             f"failure {stats['failure']}/{stats['total']} "

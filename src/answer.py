@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from ambiguity import build_clarification_prompt, needs_clarification
+from citation import ensure_chunk_citation
 from config import get_config
 from retrieve import retrieve_chunks
 
@@ -14,6 +15,7 @@ SYSTEM_PROMPT = (
     "You answer insurance-policy questions using ONLY the provided context. "
     "If context is insufficient, say so clearly. "
     "Cite chunk ids in square brackets like [demolife_critical_illness_policy.md:3]. "
+    "Citations must use exactly one colon and integer chunk index. "
     "Do not cite section clause numbers like [demolife_critical_illness_policy.md:3.2]."
 )
 
@@ -68,7 +70,8 @@ def answer_question(question: str, *, top_k: int | None = None) -> str:
             },
         ],
     )
-    return completion.choices[0].message.content or ""
+    raw = completion.choices[0].message.content or ""
+    return ensure_chunk_citation(raw, chunks)
 
 
 def main() -> None:
