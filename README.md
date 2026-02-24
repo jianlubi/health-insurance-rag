@@ -12,7 +12,7 @@ The dataset in `data/policies/` is synthetic for demo/testing.
 ## Features
 
 - Section-aware markdown chunking
-- Vector retrieval with optional reranking
+- Vector or hybrid (vector + keyword) retrieval with optional embedding rerank + LLM rerank
 - Clarifying-question behavior for ambiguous prompts
 - Grounded answers with chunk-id citations
 - Batch evaluation + reporting scripts
@@ -52,11 +52,15 @@ data/
   policies/                 # Source markdown policies
   chunks/                   # Generated chunk JSONL
   eval/                     # Eval questions + eval output JSONL
+config/
+  config.yaml               # Runtime defaults for models/retrieval/eval/ingest/index/ui
 notes/                      # Project notes and experiment logs
 src/
+  config.py                 # Config loader + defaults + deep merge
   retrieval/
-    chunk_retriever.py      # Candidate chunk retrieval from pgvector
+    chunk_retriever.py      # Vector/keyword candidate retrieval + hybrid fusion
     rerank_retriever.py     # Reranking logic
+    llm_rerank_retriever.py # LLM-based reranking logic
     auto_merging_retriever.py  # Adjacent-chunk auto merge logic
     sentence_window_retriever.py  # Sentence-window selection logic
   chunking.py               # Chunking logic
@@ -90,7 +94,20 @@ Create `.env` in project root:
 ```env
 OPENAI_API_KEY=your_openai_api_key
 DATABASE_URL=postgresql://user:password@host:5432/dbname
+REDIS_URL=redis://127.0.0.1:6379/0
 ```
+
+## Configuration (YAML)
+
+Defaults are centralized in `config/config.yaml`. The scripts (`ingest.py`, `index.py`, `retrieve.py`, `answer.py`, `eval.py`, `report_eval.py`), FastAPI (`api.py`), and Gradio (`gradio_app.py`) all read from it.
+
+Optional override file location:
+
+```powershell
+$env:RAG_CONFIG_PATH="D:\path\to\custom-config.yaml"
+```
+
+CLI flags still override YAML values for one-off runs.
 
 ## End-to-End Pipeline
 
@@ -99,11 +116,6 @@ DATABASE_URL=postgresql://user:password@host:5432/dbname
 ```powershell
 venv\Scripts\python src\ingest.py
 ```
-
-Current chunk settings (`src/ingest.py`):
-- `chunk_size_tokens=400`
-- `chunk_overlap_tokens=80`
-- `min_chunk_tokens=40`
 
 2. Index chunks into pgvector:
 
@@ -117,11 +129,23 @@ venv\Scripts\python src\index.py
 venv\Scripts\python src\answer.py "What illnesses are covered by this policy?"
 ```
 
+Example with custom retrieval depth:
+
+```powershell
+venv\Scripts\python src\answer.py --top-k 6 "What illnesses are covered by this policy?"
+```
+
 4. Run evaluation:
 
 ```powershell
 venv\Scripts\python src\eval.py
 venv\Scripts\python src\report_eval.py
+```
+
+Example with custom eval settings:
+
+```powershell
+venv\Scripts\python src\eval.py --top-k 6 --max-questions 30
 ```
 
 ## FastAPI Backend
@@ -163,11 +187,19 @@ Tabs:
 
 Retrieval flow (`src/retrieve.py`):
 1. Embed query with `text-embedding-3-small`
-2. Fetch top candidates from pgvector (`candidate_k`, default 12)
-3. Optional rerank by query-chunk cosine similarity using `text-embedding-3-large`
-4. Optional auto-merging of adjacent chunks from the same source/section
-5. Optional sentence-window selection (score sentences per chunk, return windowed text around best sentence)
-6. Return final top `k` (default 4)
+2. Fetch candidates from pgvector (`candidate_k`, default 12)
+3. Optional hybrid mode: fetch keyword candidates and fuse vector + keyword ranks with RRF
+4. Optional rerank by query-chunk cosine similarity using `text-embedding-3-large`
+5. Optional LLM rerank on top candidates (default model `gpt-4o-mini`)
+6. Optional auto-merging of adjacent chunks from the same source/section
+7. Optional sentence-window selection (score sentences per chunk, return windowed text around best sentence)
+8. Return final top `k` (default 4)
+
+Hybrid search controls:
+- `use_hybrid_search` (default: `false`)
+- `keyword_candidate_k` (default: `12`)
+- `hybrid_alpha` (default: `0.7`, vector-weight in RRF blend)
+- `hybrid_rrf_k` (default: `60`)
 
 Auto-merging controls:
 - `use_auto_merging` (default: `false`)
@@ -180,6 +212,23 @@ Sentence-window controls:
 
 Rerank control:
 - `use_rerank` (default: `false`)
+
+LLM rerank controls:
+- `use_llm_rerank` (default: `false`)
+- `llm_rerank_candidate_k` (default: `8`)
+- `llm_rerank_keep_k` (default: `4`)
+
+All default values above come from `config/config.yaml`.
+
+Query-embedding cache (Redis):
+- `cache.enabled` (default: `true`)
+- `cache.backend` (default: `redis`)
+- `cache.redis_url` (default: `redis://127.0.0.1:6379/0`)
+- `cache.embedding_ttl_seconds` (default: `86400`)
+- `cache.retrieval_enabled` (default: `true`)
+- `cache.retrieval_ttl_seconds` (default: `300`)
+- `cache.retrieval_version` (default: `v1`, bump to invalidate retrieval cache)
+- `cache.key_prefix` (default: `health_rag`)
 
 ## Notes
 
