@@ -42,7 +42,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "retrieval_enabled": True,
         "retrieval_ttl_seconds": 300,
         "retrieval_version": "v1",
-        "key_prefix": "insurance_rag",
+        "key_prefix": "health_rag",
     },
     "answer": {
         "default_question": "What illnesses are covered by this policy?",
