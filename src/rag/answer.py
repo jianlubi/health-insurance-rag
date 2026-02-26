@@ -12,6 +12,7 @@ from openai import OpenAI
 from rag.ambiguity import build_clarification_prompt, needs_clarification
 from rag.citation import ensure_chunk_citation
 from core.config import get_config
+from core.telemetry import get_tracer, setup_telemetry
 from services.rate_service import (
     BASE_BENEFIT_AMOUNT,
     DEFAULT_POLICY_ID,
@@ -31,6 +32,7 @@ _RATE_QUESTION_PATTERN = re.compile(
     r"\b(premium|quote|cost|pricing|monthly payment|smoker|non-smoker|rider)\b",
     re.IGNORECASE,
 )
+tracer = get_tracer(__name__)
 
 
 def build_context(chunks: list[dict]) -> str:
@@ -54,6 +56,7 @@ def _should_use_rate_tool(question: str) -> bool:
 
 def answer_question(question: str, *, top_k: int | None = None) -> str:
     load_dotenv()
+    setup_telemetry()
     cfg = get_config()
     retrieval_cfg = cfg["retrieval"]
     models_cfg = cfg["models"]
@@ -82,20 +85,21 @@ def answer_question(question: str, *, top_k: int | None = None) -> str:
     client = OpenAI(api_key=openai_api_key)
 
     if not is_rate_question:
-        completion = client.chat.completions.create(
-            model=str(models_cfg["answer_model"]),
-            temperature=0,
-            messages=[
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT,
-                },
-                {
-                    "role": "user",
-                    "content": f"Question:\n{question}\n\nContext:\n{context}",
-                },
-            ],
-        )
+        with tracer.start_as_current_span("openai.answer_completion"):
+            completion = client.chat.completions.create(
+                model=str(models_cfg["answer_model"]),
+                temperature=0,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": SYSTEM_PROMPT,
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Question:\n{question}\n\nContext:\n{context}",
+                    },
+                ],
+            )
         raw = completion.choices[0].message.content or ""
         return ensure_chunk_citation(raw, chunks)
 
@@ -155,13 +159,14 @@ def answer_question(question: str, *, top_k: int | None = None) -> str:
     ]
     tool_called = False
     for _ in range(3):
-        completion = client.chat.completions.create(
-            model=str(models_cfg["answer_model"]),
-            temperature=0,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-        )
+        with tracer.start_as_current_span("openai.rate_tool_step"):
+            completion = client.chat.completions.create(
+                model=str(models_cfg["answer_model"]),
+                temperature=0,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+            )
         message = completion.choices[0].message
         if not message.tool_calls:
             if tool_called:
@@ -208,26 +213,27 @@ def answer_question(question: str, *, top_k: int | None = None) -> str:
                 }
             else:
                 try:
-                    age = int(args["age"])
-                    smoker = coerce_smoker(args["smoker"])
-                    riders_raw = args.get("riders", [])
-                    if isinstance(riders_raw, str):
-                        riders = [riders_raw]
-                    elif isinstance(riders_raw, list):
-                        riders = [str(item) for item in riders_raw]
-                    else:
-                        raise ValueError("riders must be a list of strings")
-                    benefit_amount = float(
-                        args.get("benefit_amount", BASE_BENEFIT_AMOUNT)
-                    )
-                    policy_id = str(args.get("policy_id", DEFAULT_POLICY_ID))
-                    tool_result = get_rate_quote(
-                        age=age,
-                        smoker=smoker,
-                        riders=riders,
-                        benefit_amount=benefit_amount,
-                        policy_id=policy_id,
-                    )
+                    with tracer.start_as_current_span("rate_service.get_rate_quote"):
+                        age = int(args["age"])
+                        smoker = coerce_smoker(args["smoker"])
+                        riders_raw = args.get("riders", [])
+                        if isinstance(riders_raw, str):
+                            riders = [riders_raw]
+                        elif isinstance(riders_raw, list):
+                            riders = [str(item) for item in riders_raw]
+                        else:
+                            raise ValueError("riders must be a list of strings")
+                        benefit_amount = float(
+                            args.get("benefit_amount", BASE_BENEFIT_AMOUNT)
+                        )
+                        policy_id = str(args.get("policy_id", DEFAULT_POLICY_ID))
+                        tool_result = get_rate_quote(
+                            age=age,
+                            smoker=smoker,
+                            riders=riders,
+                            benefit_amount=benefit_amount,
+                            policy_id=policy_id,
+                        )
                 except KeyError:
                     tool_result = {
                         "error": "missing required inputs: age and smoker are required"

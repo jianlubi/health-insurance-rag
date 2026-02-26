@@ -97,6 +97,8 @@ scripts/                    # Lightweight wrappers for CLI entrypoints
 This repo includes `docker-compose.yml` for:
 - `postgres` (with `pgvector`)
 - `pgadmin` (web UI)
+- `otel-collector` (OTLP receiver/export pipeline)
+- `jaeger` (trace UI)
 
 Start services:
 
@@ -113,6 +115,9 @@ docker compose down
 Default ports:
 - Postgres: `localhost:5433`
 - pgAdmin: `http://localhost:5050`
+- Jaeger UI: `http://localhost:16686`
+- OTLP gRPC: `localhost:4317`
+- OTLP HTTP: `localhost:4318`
 
 Update `.env` for Docker Postgres:
 
@@ -139,13 +144,13 @@ venv\Scripts\pip install -r requirements.txt
 
 ## Environment Variables
 
-Create `.env` in project root:
+Copy `.env.example` to `.env`, then fill in real credentials:
 
-```env
-OPENAI_API_KEY=your_openai_api_key
-DATABASE_URL=postgresql://user:password@host:5432/dbname
-REDIS_URL=redis://127.0.0.1:6379/0
+```powershell
+Copy-Item .env.example .env
 ```
+
+Canonical env var definitions live in `.env.example`:
 
 ## Configuration (YAML)
 
@@ -238,6 +243,21 @@ Tool-calling example via `/ask`:
 Invoke-RestMethod http://127.0.0.1:8000/ask -Method Post -ContentType "application/json" -Body '{"question":"What is my monthly premium if I am 42, non-smoker, with early-stage cancer rider?"}'
 ```
 
+## OpenTelemetry
+
+Tracing is built in for FastAPI requests, OpenAI/httpx calls, Postgres (`psycopg2`), Redis, and retrieval pipeline stages.
+
+1. Start supporting services:
+
+```powershell
+docker compose up -d otel-collector jaeger
+```
+
+2. In `.env`, set `OTEL_ENABLED=true`.
+
+3. Start API as usual and open Jaeger:
+- `http://127.0.0.1:16686`
+
 ## Gradio Frontend
 
 Start UI:
@@ -297,7 +317,7 @@ Query-embedding cache (Redis):
 - `cache.retrieval_enabled` (default: `true`)
 - `cache.retrieval_ttl_seconds` (default: `300`)
 - `cache.retrieval_version` (default: `v1`, bump to invalidate retrieval cache)
-- `cache.key_prefix` (default: `insurance_rag`)
+- `cache.key_prefix` (default: `health_rag`)
 
 ## Notes
 

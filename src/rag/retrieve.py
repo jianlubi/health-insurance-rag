@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from core.config import get_config
+from core.telemetry import get_tracer, setup_telemetry
 from rag.retrieval.auto_merging_retriever import auto_merge_chunks
 from rag.retrieval.chunk_retriever import (
     fetch_candidate_chunks,
@@ -19,6 +20,8 @@ from rag.retrieval.llm_rerank_retriever import llm_rerank_chunks
 from rag.retrieval.redis_cache import get_json, set_json
 from rag.retrieval.rerank_retriever import rerank_chunks
 from rag.retrieval.sentence_window_retriever import sentence_window_chunks
+
+tracer = get_tracer(__name__)
 
 
 def _normalize_question(question: str) -> str:
@@ -100,6 +103,7 @@ def retrieve_chunks(
     return_meta: bool = False,
 ) -> list[dict] | tuple[list[dict], dict[str, Any]]:
     load_dotenv()
+    setup_telemetry()
 
     database_url = os.getenv("DATABASE_URL")
     openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -223,7 +227,8 @@ def retrieve_chunks(
         "retrieval_cache_hit": None if not retrieval_cache_enabled else False,
     }
     if retrieval_cache_enabled:
-        cached_results = get_json(cache_redis_url, retrieval_cache_key)
+        with tracer.start_as_current_span("rag.retrieval_cache_lookup"):
+            cached_results = get_json(cache_redis_url, retrieval_cache_key)
         if isinstance(cached_results, list):
             retrieval_meta["retrieval_cache_hit"] = True
             if return_meta:
@@ -232,102 +237,109 @@ def retrieve_chunks(
 
     client = OpenAI(api_key=openai_api_key)
     if use_hybrid_search:
-        results = fetch_hybrid_candidate_chunks(
-            question,
-            client=client,
-            database_url=database_url,
-            table_name=table_name,
-            embedding_model=embedding_model,
-            vector_fetch_k=max(1, fetch_k),
-            keyword_fetch_k=max(1, max(fetch_k, keyword_candidate_k)),
-            alpha=max(0.0, min(1.0, hybrid_alpha)),
-            rrf_k=max(1, hybrid_rrf_k),
-            limit=max(1, fetch_k),
-            embedding_cache_enabled=cache_enabled,
-            embedding_cache_redis_url=cache_redis_url,
-            embedding_cache_ttl_seconds=max(0, cache_embedding_ttl_seconds),
-            embedding_cache_namespace=cache_namespace,
-        )
+        with tracer.start_as_current_span("rag.fetch_hybrid_candidates"):
+            results = fetch_hybrid_candidate_chunks(
+                question,
+                client=client,
+                database_url=database_url,
+                table_name=table_name,
+                embedding_model=embedding_model,
+                vector_fetch_k=max(1, fetch_k),
+                keyword_fetch_k=max(1, max(fetch_k, keyword_candidate_k)),
+                alpha=max(0.0, min(1.0, hybrid_alpha)),
+                rrf_k=max(1, hybrid_rrf_k),
+                limit=max(1, fetch_k),
+                embedding_cache_enabled=cache_enabled,
+                embedding_cache_redis_url=cache_redis_url,
+                embedding_cache_ttl_seconds=max(0, cache_embedding_ttl_seconds),
+                embedding_cache_namespace=cache_namespace,
+            )
     else:
-        results = fetch_candidate_chunks(
-            question,
-            client=client,
-            database_url=database_url,
-            table_name=table_name,
-            embedding_model=embedding_model,
-            fetch_k=fetch_k,
-            embedding_cache_enabled=cache_enabled,
-            embedding_cache_redis_url=cache_redis_url,
-            embedding_cache_ttl_seconds=max(0, cache_embedding_ttl_seconds),
-            embedding_cache_namespace=cache_namespace,
-        )
+        with tracer.start_as_current_span("rag.fetch_vector_candidates"):
+            results = fetch_candidate_chunks(
+                question,
+                client=client,
+                database_url=database_url,
+                table_name=table_name,
+                embedding_model=embedding_model,
+                fetch_k=fetch_k,
+                embedding_cache_enabled=cache_enabled,
+                embedding_cache_redis_url=cache_redis_url,
+                embedding_cache_ttl_seconds=max(0, cache_embedding_ttl_seconds),
+                embedding_cache_namespace=cache_namespace,
+            )
 
     if use_rerank and len(results) > top_k:
         try:
-            results = rerank_chunks(
-                question,
-                results,
-                client=client,
-                model=rerank_model,
-            )
+            with tracer.start_as_current_span("rag.embedding_rerank"):
+                results = rerank_chunks(
+                    question,
+                    results,
+                    client=client,
+                    model=rerank_model,
+                )
         except Exception:
             # Retrieval should still work even if reranking fails.
             pass
 
     if use_llm_rerank and len(results) > 1:
         try:
-            candidate_limit = min(
-                max(1, llm_rerank_candidate_k),
-                len(results),
-            )
-            keep_limit = min(
-                max(1, llm_rerank_keep_k),
-                candidate_limit,
-            )
-            llm_candidates = results[:candidate_limit]
-            reranked_candidates = llm_rerank_chunks(
-                question,
-                llm_candidates,
-                client=client,
-                model=llm_rerank_model,
-            )
-            results = reranked_candidates[:keep_limit] + results[candidate_limit:]
+            with tracer.start_as_current_span("rag.llm_rerank"):
+                candidate_limit = min(
+                    max(1, llm_rerank_candidate_k),
+                    len(results),
+                )
+                keep_limit = min(
+                    max(1, llm_rerank_keep_k),
+                    candidate_limit,
+                )
+                llm_candidates = results[:candidate_limit]
+                reranked_candidates = llm_rerank_chunks(
+                    question,
+                    llm_candidates,
+                    client=client,
+                    model=llm_rerank_model,
+                )
+                results = reranked_candidates[:keep_limit] + results[candidate_limit:]
         except Exception:
             # Retrieval should still work even if LLM reranking fails.
             pass
 
     if use_auto_merging and results:
         try:
-            results = auto_merge_chunks(
-                results,
-                max_gap=max(0, auto_merge_max_gap),
-                max_merged_chunks=max(1, auto_merge_max_chunks),
-            )
+            with tracer.start_as_current_span("rag.auto_merge"):
+                results = auto_merge_chunks(
+                    results,
+                    max_gap=max(0, auto_merge_max_gap),
+                    max_merged_chunks=max(1, auto_merge_max_chunks),
+                )
         except Exception:
             # Retrieval should still work even if auto-merging fails.
             pass
 
     if use_sentence_window and results:
         try:
-            results = sentence_window_chunks(
-                question,
-                results,
-                client=client,
-                model=rerank_model,
-                window_size=max(0, sentence_window_size),
-            )
+            with tracer.start_as_current_span("rag.sentence_window"):
+                results = sentence_window_chunks(
+                    question,
+                    results,
+                    client=client,
+                    model=rerank_model,
+                    window_size=max(0, sentence_window_size),
+                )
         except Exception:
             # Retrieval should still work even if sentence-window selection fails.
             pass
 
     final_results = results[:top_k]
     if retrieval_cache_enabled:
-        set_json(
-            cache_redis_url,
-            retrieval_cache_key,
-            final_results,
-            ttl_seconds=max(0, retrieval_cache_ttl_seconds),
-        )
+        with tracer.start_as_current_span("rag.retrieval_cache_store"):
+            set_json(
+                cache_redis_url,
+                retrieval_cache_key,
+                final_results,
+                ttl_seconds=max(0, retrieval_cache_ttl_seconds),
+            )
     if return_meta:
         return final_results, retrieval_meta
     return final_results

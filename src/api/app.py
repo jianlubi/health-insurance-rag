@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
+from core.telemetry import get_tracer, instrument_fastapi_app, setup_telemetry
 from rag.ambiguity import build_clarification_prompt, needs_clarification
 from rag.answer import SYSTEM_PROMPT, build_context
 from rag.citation import ensure_chunk_citation
@@ -27,18 +28,25 @@ load_dotenv()
 CFG = get_config()
 RETRIEVAL_CFG = CFG["retrieval"]
 MODELS_CFG = CFG["models"]
+APP_VERSION = "0.1.0"
 _RATE_QUESTION_PATTERN = re.compile(
     r"\b(premium|quote|cost|pricing|monthly payment|smoker|non-smoker|rider)\b",
     re.IGNORECASE,
 )
 
+setup_telemetry(
+    service_version=APP_VERSION,
+)
+
 app = FastAPI(
     title="Health Insurance RAG API",
-    version="0.1.0",
+    version=APP_VERSION,
     description=(
         "HTTP API for retrieval-based policy Q&A and DB-backed premium rate quotes."
     ),
 )
+instrument_fastapi_app(app)
+tracer = get_tracer(__name__, APP_VERSION)
 
 
 class AskRequest(BaseModel):
@@ -244,20 +252,21 @@ def _answer_with_chunks(question: str, chunks: list[dict], model: str) -> str:
     )
     client = OpenAI(api_key=openai_api_key)
     if not is_rate_question:
-        completion = client.chat.completions.create(
-            model=str(model),
-            temperature=0,
-            messages=[
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT,
-                },
-                {
-                    "role": "user",
-                    "content": f"Question:\n{question}\n\nContext:\n{context}",
-                },
-            ],
-        )
+        with tracer.start_as_current_span("openai.answer_completion"):
+            completion = client.chat.completions.create(
+                model=str(model),
+                temperature=0,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": SYSTEM_PROMPT,
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Question:\n{question}\n\nContext:\n{context}",
+                    },
+                ],
+            )
         raw = (completion.choices[0].message.content or "").strip()
         return ensure_chunk_citation(raw, chunks)
 
@@ -331,13 +340,14 @@ def _answer_with_chunks(question: str, chunks: list[dict], model: str) -> str:
 
     tool_called = False
     for _ in range(3):
-        completion = client.chat.completions.create(
-            model=str(model),
-            temperature=0,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-        )
+        with tracer.start_as_current_span("openai.rate_tool_step"):
+            completion = client.chat.completions.create(
+                model=str(model),
+                temperature=0,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+            )
         message = completion.choices[0].message
 
         if not message.tool_calls:
@@ -385,26 +395,27 @@ def _answer_with_chunks(question: str, chunks: list[dict], model: str) -> str:
                 }
             else:
                 try:
-                    age = int(args["age"])
-                    smoker = coerce_smoker(args["smoker"])
-                    riders_raw = args.get("riders", [])
-                    if isinstance(riders_raw, str):
-                        riders = [riders_raw]
-                    elif isinstance(riders_raw, list):
-                        riders = [str(item) for item in riders_raw]
-                    else:
-                        raise ValueError("riders must be a list of strings")
-                    benefit_amount = float(
-                        args.get("benefit_amount", BASE_BENEFIT_AMOUNT)
-                    )
-                    policy_id = str(args.get("policy_id", DEFAULT_POLICY_ID))
-                    tool_result = get_rate_quote(
-                        age=age,
-                        smoker=smoker,
-                        riders=riders,
-                        benefit_amount=benefit_amount,
-                        policy_id=policy_id,
-                    )
+                    with tracer.start_as_current_span("rate_service.get_rate_quote"):
+                        age = int(args["age"])
+                        smoker = coerce_smoker(args["smoker"])
+                        riders_raw = args.get("riders", [])
+                        if isinstance(riders_raw, str):
+                            riders = [riders_raw]
+                        elif isinstance(riders_raw, list):
+                            riders = [str(item) for item in riders_raw]
+                        else:
+                            raise ValueError("riders must be a list of strings")
+                        benefit_amount = float(
+                            args.get("benefit_amount", BASE_BENEFIT_AMOUNT)
+                        )
+                        policy_id = str(args.get("policy_id", DEFAULT_POLICY_ID))
+                        tool_result = get_rate_quote(
+                            age=age,
+                            smoker=smoker,
+                            riders=riders,
+                            benefit_amount=benefit_amount,
+                            policy_id=policy_id,
+                        )
                 except KeyError:
                     tool_result = {
                         "error": "missing required inputs: age and smoker are required"
@@ -427,13 +438,14 @@ def _answer_with_chunks(question: str, chunks: list[dict], model: str) -> str:
 @app.post("/rates/quote", response_model=RateQuoteResponse)
 def quote_rate(payload: RateQuoteRequest) -> RateQuoteResponse:
     try:
-        quote = get_rate_quote(
-            age=payload.age,
-            smoker=payload.smoker,
-            riders=payload.riders,
-            benefit_amount=payload.benefit_amount,
-            policy_id=payload.policy_id,
-        )
+        with tracer.start_as_current_span("rate_service.quote_rate_api"):
+            quote = get_rate_quote(
+                age=payload.age,
+                smoker=payload.smoker,
+                riders=payload.riders,
+                benefit_amount=payload.benefit_amount,
+                policy_id=payload.policy_id,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -445,24 +457,30 @@ def quote_rate(payload: RateQuoteRequest) -> RateQuoteResponse:
 def retrieve(payload: RetrieveRequest) -> RetrieveResponse:
     question = _validate_question(payload.question)
     try:
-        chunks = retrieve_chunks(
-            question,
-            top_k=payload.top_k,
-            candidate_k=payload.candidate_k,
-            use_hybrid_search=payload.use_hybrid_search,
-            keyword_candidate_k=payload.keyword_candidate_k,
-            hybrid_alpha=payload.hybrid_alpha,
-            hybrid_rrf_k=payload.hybrid_rrf_k,
-            use_rerank=payload.use_rerank,
-            use_llm_rerank=payload.use_llm_rerank,
-            llm_rerank_candidate_k=payload.llm_rerank_candidate_k,
-            llm_rerank_keep_k=payload.llm_rerank_keep_k,
-            use_auto_merging=payload.use_auto_merging,
-            auto_merge_max_gap=payload.auto_merge_max_gap,
-            auto_merge_max_chunks=payload.auto_merge_max_chunks,
-            use_sentence_window=payload.use_sentence_window,
-            sentence_window_size=payload.sentence_window_size,
-        )
+        with tracer.start_as_current_span("rag.retrieve_endpoint") as span:
+            span.set_attribute("rag.top_k", payload.top_k)
+            span.set_attribute("rag.candidate_k", payload.candidate_k)
+            span.set_attribute("rag.use_hybrid_search", payload.use_hybrid_search)
+            span.set_attribute("rag.use_rerank", payload.use_rerank)
+            span.set_attribute("rag.use_llm_rerank", payload.use_llm_rerank)
+            chunks = retrieve_chunks(
+                question,
+                top_k=payload.top_k,
+                candidate_k=payload.candidate_k,
+                use_hybrid_search=payload.use_hybrid_search,
+                keyword_candidate_k=payload.keyword_candidate_k,
+                hybrid_alpha=payload.hybrid_alpha,
+                hybrid_rrf_k=payload.hybrid_rrf_k,
+                use_rerank=payload.use_rerank,
+                use_llm_rerank=payload.use_llm_rerank,
+                llm_rerank_candidate_k=payload.llm_rerank_candidate_k,
+                llm_rerank_keep_k=payload.llm_rerank_keep_k,
+                use_auto_merging=payload.use_auto_merging,
+                auto_merge_max_gap=payload.auto_merge_max_gap,
+                auto_merge_max_chunks=payload.auto_merge_max_chunks,
+                use_sentence_window=payload.use_sentence_window,
+                sentence_window_size=payload.sentence_window_size,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except Exception as exc:
@@ -522,28 +540,35 @@ def ask(payload: AskRequest) -> AskResponse:
         )
 
     try:
-        if is_rate_question:
-            chunks: list[dict] = []
-        else:
-            chunks = retrieve_chunks(
-                question,
-                top_k=payload.top_k,
-                candidate_k=payload.candidate_k,
-                use_hybrid_search=payload.use_hybrid_search,
-                keyword_candidate_k=payload.keyword_candidate_k,
-                hybrid_alpha=payload.hybrid_alpha,
-                hybrid_rrf_k=payload.hybrid_rrf_k,
-                use_rerank=payload.use_rerank,
-                use_llm_rerank=payload.use_llm_rerank,
-                llm_rerank_candidate_k=payload.llm_rerank_candidate_k,
-                llm_rerank_keep_k=payload.llm_rerank_keep_k,
-                use_auto_merging=payload.use_auto_merging,
-                auto_merge_max_gap=payload.auto_merge_max_gap,
-                auto_merge_max_chunks=payload.auto_merge_max_chunks,
-                use_sentence_window=payload.use_sentence_window,
-                sentence_window_size=payload.sentence_window_size,
-            )
-        answer = _answer_with_chunks(question, chunks, payload.model)
+        with tracer.start_as_current_span("rag.ask_endpoint") as span:
+            span.set_attribute("rag.top_k", payload.top_k)
+            span.set_attribute("rag.candidate_k", payload.candidate_k)
+            span.set_attribute("rag.use_hybrid_search", payload.use_hybrid_search)
+            span.set_attribute("rag.use_rerank", payload.use_rerank)
+            span.set_attribute("rag.use_llm_rerank", payload.use_llm_rerank)
+            span.set_attribute("rag.is_rate_question", is_rate_question)
+            if is_rate_question:
+                chunks: list[dict] = []
+            else:
+                chunks = retrieve_chunks(
+                    question,
+                    top_k=payload.top_k,
+                    candidate_k=payload.candidate_k,
+                    use_hybrid_search=payload.use_hybrid_search,
+                    keyword_candidate_k=payload.keyword_candidate_k,
+                    hybrid_alpha=payload.hybrid_alpha,
+                    hybrid_rrf_k=payload.hybrid_rrf_k,
+                    use_rerank=payload.use_rerank,
+                    use_llm_rerank=payload.use_llm_rerank,
+                    llm_rerank_candidate_k=payload.llm_rerank_candidate_k,
+                    llm_rerank_keep_k=payload.llm_rerank_keep_k,
+                    use_auto_merging=payload.use_auto_merging,
+                    auto_merge_max_gap=payload.auto_merge_max_gap,
+                    auto_merge_max_chunks=payload.auto_merge_max_chunks,
+                    use_sentence_window=payload.use_sentence_window,
+                    sentence_window_size=payload.sentence_window_size,
+                )
+            answer = _answer_with_chunks(question, chunks, payload.model)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except Exception as exc:
