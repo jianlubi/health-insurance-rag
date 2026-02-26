@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-
-from openai import OpenAI
+from typing import Any
 
 
 def _clip_text(text: str, *, max_chars: int = 900) -> str:
@@ -54,8 +53,9 @@ def llm_rerank_chunks(
     question: str,
     chunks: list[dict],
     *,
-    client: OpenAI,
+    client: Any,
     model: str,
+    openai_request_kwargs: dict[str, Any] | None = None,
 ) -> list[dict]:
     if not chunks:
         return []
@@ -93,6 +93,7 @@ def llm_rerank_chunks(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
+        **(openai_request_kwargs or {}),
     )
     raw = completion.choices[0].message.content or ""
     ranked_indices = _parse_ranked_indices(raw, candidate_count=len(chunks))
@@ -103,4 +104,3 @@ def llm_rerank_chunks(
         item["llm_rerank_rank"] = rank
         reranked.append(item)
     return reranked
-

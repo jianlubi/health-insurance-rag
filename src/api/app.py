@@ -7,9 +7,9 @@ from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from openai import OpenAI
 from pydantic import BaseModel, Field
 
+from core.openai_client import create_openai_client
 from core.telemetry import get_tracer, instrument_fastapi_app, setup_telemetry
 from rag.ambiguity import build_clarification_prompt, needs_clarification
 from rag.answer import SYSTEM_PROMPT, build_context
@@ -250,7 +250,7 @@ def _answer_with_chunks(question: str, chunks: list[dict], model: str) -> str:
         if chunks
         else "No policy context retrieved for this request."
     )
-    client = OpenAI(api_key=openai_api_key)
+    client = create_openai_client(api_key=openai_api_key)
     if not is_rate_question:
         with tracer.start_as_current_span("openai.answer_completion"):
             completion = client.chat.completions.create(

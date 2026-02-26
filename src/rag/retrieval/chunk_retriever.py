@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+from typing import Any
+
 import psycopg2
-from openai import OpenAI
 
 from rag.retrieval.redis_cache import get_json, set_json
 
@@ -63,13 +64,14 @@ def _set_cached_embedding(
 
 def embed_query(
     question: str,
-    client: OpenAI,
+    client: Any,
     model: str,
     *,
     cache_enabled: bool,
     cache_redis_url: str,
     cache_ttl_seconds: int,
     cache_namespace: str,
+    openai_request_kwargs: dict[str, Any] | None = None,
 ) -> list[float]:
     cache_key = _embedding_cache_key(
         namespace=cache_namespace,
@@ -84,7 +86,11 @@ def embed_query(
     if cached is not None:
         return cached
 
-    resp = client.embeddings.create(model=model, input=question)
+    resp = client.embeddings.create(
+        model=model,
+        input=question,
+        **(openai_request_kwargs or {}),
+    )
     embedding = resp.data[0].embedding
     _set_cached_embedding(
         enabled=cache_enabled,
@@ -99,7 +105,7 @@ def embed_query(
 def fetch_vector_candidate_chunks(
     question: str,
     *,
-    client: OpenAI,
+    client: Any,
     database_url: str,
     table_name: str,
     embedding_model: str,
@@ -108,6 +114,7 @@ def fetch_vector_candidate_chunks(
     embedding_cache_redis_url: str = "redis://127.0.0.1:6379/0",
     embedding_cache_ttl_seconds: int = 86400,
     embedding_cache_namespace: str = "health_rag",
+    openai_request_kwargs: dict[str, Any] | None = None,
 ) -> list[dict]:
     query_vector = embed_query(
         question,
@@ -117,6 +124,7 @@ def fetch_vector_candidate_chunks(
         cache_redis_url=embedding_cache_redis_url,
         cache_ttl_seconds=embedding_cache_ttl_seconds,
         cache_namespace=embedding_cache_namespace,
+        openai_request_kwargs=openai_request_kwargs,
     )
     vector_text = vector_literal(query_vector)
 
@@ -279,7 +287,7 @@ def fuse_by_reciprocal_rank(
 def fetch_hybrid_candidate_chunks(
     question: str,
     *,
-    client: OpenAI,
+    client: Any,
     database_url: str,
     table_name: str,
     embedding_model: str,
@@ -292,6 +300,7 @@ def fetch_hybrid_candidate_chunks(
     embedding_cache_redis_url: str = "redis://127.0.0.1:6379/0",
     embedding_cache_ttl_seconds: int = 86400,
     embedding_cache_namespace: str = "health_rag",
+    openai_request_kwargs: dict[str, Any] | None = None,
 ) -> list[dict]:
     vector_results = fetch_vector_candidate_chunks(
         question,
@@ -304,6 +313,7 @@ def fetch_hybrid_candidate_chunks(
         embedding_cache_redis_url=embedding_cache_redis_url,
         embedding_cache_ttl_seconds=embedding_cache_ttl_seconds,
         embedding_cache_namespace=embedding_cache_namespace,
+        openai_request_kwargs=openai_request_kwargs,
     )
     try:
         keyword_results = fetch_keyword_candidate_chunks(
@@ -330,7 +340,7 @@ def fetch_hybrid_candidate_chunks(
 def fetch_candidate_chunks(
     question: str,
     *,
-    client: OpenAI,
+    client: Any,
     database_url: str,
     table_name: str,
     embedding_model: str,
@@ -339,6 +349,7 @@ def fetch_candidate_chunks(
     embedding_cache_redis_url: str = "redis://127.0.0.1:6379/0",
     embedding_cache_ttl_seconds: int = 86400,
     embedding_cache_namespace: str = "health_rag",
+    openai_request_kwargs: dict[str, Any] | None = None,
 ) -> list[dict]:
     return fetch_vector_candidate_chunks(
         question,
@@ -351,5 +362,6 @@ def fetch_candidate_chunks(
         embedding_cache_redis_url=embedding_cache_redis_url,
         embedding_cache_ttl_seconds=embedding_cache_ttl_seconds,
         embedding_cache_namespace=embedding_cache_namespace,
+        openai_request_kwargs=openai_request_kwargs,
     )
 

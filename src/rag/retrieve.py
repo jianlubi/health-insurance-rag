@@ -7,9 +7,9 @@ import os
 from typing import Any
 
 from dotenv import load_dotenv
-from openai import OpenAI
 
 from core.config import get_config
+from core.openai_client import create_openai_client
 from core.telemetry import get_tracer, setup_telemetry
 from rag.retrieval.auto_merging_retriever import auto_merge_chunks
 from rag.retrieval.chunk_retriever import (
@@ -100,6 +100,7 @@ def retrieve_chunks(
     auto_merge_max_chunks: int | None = None,
     use_sentence_window: bool | None = None,
     sentence_window_size: int | None = None,
+    openai_request_kwargs: dict[str, Any] | None = None,
     return_meta: bool = False,
 ) -> list[dict] | tuple[list[dict], dict[str, Any]]:
     load_dotenv()
@@ -235,7 +236,7 @@ def retrieve_chunks(
                 return cached_results, retrieval_meta
             return cached_results
 
-    client = OpenAI(api_key=openai_api_key)
+    client = create_openai_client(api_key=openai_api_key)
     if use_hybrid_search:
         with tracer.start_as_current_span("rag.fetch_hybrid_candidates"):
             results = fetch_hybrid_candidate_chunks(
@@ -253,6 +254,7 @@ def retrieve_chunks(
                 embedding_cache_redis_url=cache_redis_url,
                 embedding_cache_ttl_seconds=max(0, cache_embedding_ttl_seconds),
                 embedding_cache_namespace=cache_namespace,
+                openai_request_kwargs=openai_request_kwargs,
             )
     else:
         with tracer.start_as_current_span("rag.fetch_vector_candidates"):
@@ -267,6 +269,7 @@ def retrieve_chunks(
                 embedding_cache_redis_url=cache_redis_url,
                 embedding_cache_ttl_seconds=max(0, cache_embedding_ttl_seconds),
                 embedding_cache_namespace=cache_namespace,
+                openai_request_kwargs=openai_request_kwargs,
             )
 
     if use_rerank and len(results) > top_k:
@@ -277,6 +280,7 @@ def retrieve_chunks(
                     results,
                     client=client,
                     model=rerank_model,
+                    openai_request_kwargs=openai_request_kwargs,
                 )
         except Exception:
             # Retrieval should still work even if reranking fails.
@@ -299,6 +303,7 @@ def retrieve_chunks(
                     llm_candidates,
                     client=client,
                     model=llm_rerank_model,
+                    openai_request_kwargs=openai_request_kwargs,
                 )
                 results = reranked_candidates[:keep_limit] + results[candidate_limit:]
         except Exception:
@@ -326,6 +331,7 @@ def retrieve_chunks(
                     client=client,
                     model=rerank_model,
                     window_size=max(0, sentence_window_size),
+                    openai_request_kwargs=openai_request_kwargs,
                 )
         except Exception:
             # Retrieval should still work even if sentence-window selection fails.

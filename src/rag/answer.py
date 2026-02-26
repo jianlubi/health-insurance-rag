@@ -7,11 +7,11 @@ import re
 from typing import Any
 
 from dotenv import load_dotenv
-from openai import OpenAI
 
 from rag.ambiguity import build_clarification_prompt, needs_clarification
 from rag.citation import ensure_chunk_citation
 from core.config import get_config
+from core.openai_client import create_openai_client
 from core.telemetry import get_tracer, setup_telemetry
 from services.rate_service import (
     BASE_BENEFIT_AMOUNT,
@@ -82,7 +82,7 @@ def answer_question(question: str, *, top_k: int | None = None) -> str:
         if chunks
         else "No policy context retrieved for this request."
     )
-    client = OpenAI(api_key=openai_api_key)
+    client = create_openai_client(api_key=openai_api_key)
 
     if not is_rate_question:
         with tracer.start_as_current_span("openai.answer_completion"):

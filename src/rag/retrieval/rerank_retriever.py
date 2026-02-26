@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import math
-
-from openai import OpenAI
+from typing import Any
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
@@ -18,8 +17,9 @@ def rerank_chunks(
     question: str,
     chunks: list[dict],
     *,
-    client: OpenAI,
+    client: Any,
     model: str,
+    openai_request_kwargs: dict[str, Any] | None = None,
 ) -> list[dict]:
     if not chunks:
         return []
@@ -27,6 +27,7 @@ def rerank_chunks(
     resp = client.embeddings.create(
         model=model,
         input=[question, *[chunk["content"] for chunk in chunks]],
+        **(openai_request_kwargs or {}),
     )
     vectors = [item.embedding for item in resp.data]
     query_vector = vectors[0]
@@ -40,4 +41,3 @@ def rerank_chunks(
 
     reranked.sort(key=lambda c: c["rerank_score"], reverse=True)
     return reranked
-
