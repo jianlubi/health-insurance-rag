@@ -6,7 +6,7 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
-from config import get_config
+from core.config import get_config
 
 
 def pct(numerator: int, denominator: int) -> float:
@@ -344,3 +344,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

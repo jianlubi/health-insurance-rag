@@ -10,17 +10,17 @@ from fastapi import FastAPI, HTTPException
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from ambiguity import build_clarification_prompt, needs_clarification
-from answer import SYSTEM_PROMPT, build_context
-from citation import ensure_chunk_citation
-from config import get_config
-from rate_service import (
+from rag.ambiguity import build_clarification_prompt, needs_clarification
+from rag.answer import SYSTEM_PROMPT, build_context
+from rag.citation import ensure_chunk_citation
+from core.config import get_config
+from services.rate_service import (
     BASE_BENEFIT_AMOUNT,
     DEFAULT_POLICY_ID,
     coerce_smoker,
     get_rate_quote,
 )
-from retrieve import retrieve_chunks
+from rag.retrieve import retrieve_chunks
 
 
 load_dotenv()
@@ -572,3 +572,4 @@ def ask(payload: AskRequest) -> AskResponse:
         retrieved_count=len(mapped),
         chunks=mapped if payload.include_chunks else None,
     )
+

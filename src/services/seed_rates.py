@@ -4,7 +4,7 @@ import argparse
 
 from dotenv import load_dotenv
 
-from rate_service import DEFAULT_POLICY_ID, seed_default_rates
+from services.rate_service import DEFAULT_POLICY_ID, seed_default_rates
 
 
 def main() -> None:
@@ -26,3 +26,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

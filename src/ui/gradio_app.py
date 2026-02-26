@@ -6,8 +6,8 @@ import json
 from fastapi import HTTPException
 import gradio as gr
 
-from api import AskRequest, RetrieveRequest, ask, retrieve
-from config import get_config
+from api.app import AskRequest, RetrieveRequest, ask, retrieve
+from core.config import get_config
 
 
 CFG = get_config()
@@ -533,3 +533,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

@@ -9,11 +9,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from answer import build_context
-from ambiguity import asked_clarifying_question, build_clarification_prompt
-from citation import ensure_chunk_citation, has_chunk_citation
-from config import get_config
-from retrieve import retrieve_chunks
+from rag.answer import build_context
+from rag.ambiguity import asked_clarifying_question, build_clarification_prompt
+from rag.citation import ensure_chunk_citation, has_chunk_citation
+from core.config import get_config
+from rag.retrieve import retrieve_chunks
 
 
 def load_questions(path: Path, *, max_questions: int) -> list[dict]:
@@ -510,3 +510,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

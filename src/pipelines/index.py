@@ -11,7 +11,7 @@ from openai import OpenAI
 import psycopg2
 from psycopg2.extras import execute_batch
 
-from config import get_config
+from core.config import get_config
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -197,3 +197,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

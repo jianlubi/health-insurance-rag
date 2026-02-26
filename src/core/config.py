@@ -42,7 +42,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "retrieval_enabled": True,
         "retrieval_ttl_seconds": 300,
         "retrieval_version": "v1",
-        "key_prefix": "health_rag",
+        "key_prefix": "insurance_rag",
     },
     "answer": {
         "default_question": "What illnesses are covered by this policy?",
@@ -94,13 +94,25 @@ def _load_user_config() -> dict[str, Any]:
     if env_path:
         config_path = Path(env_path)
     else:
-        repo_root = Path(__file__).resolve().parent.parent
-        search_paths = [
+        search_paths: list[Path] = [
             Path("config/config.yaml"),
             Path("config.yaml"),  # legacy path compatibility
-            repo_root / "config" / "config.yaml",
-            repo_root / "config.yaml",  # legacy path compatibility
         ]
+        module_path = Path(__file__).resolve()
+        for parent in module_path.parents:
+            search_paths.append(parent / "config" / "config.yaml")
+            search_paths.append(parent / "config.yaml")  # legacy path compatibility
+
+        deduped_search_paths: list[Path] = []
+        seen: set[str] = set()
+        for candidate in search_paths:
+            key = str(candidate)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped_search_paths.append(candidate)
+
+        search_paths = deduped_search_paths
         config_path = next((p for p in search_paths if p.exists()), search_paths[0])
 
     if not config_path.exists():

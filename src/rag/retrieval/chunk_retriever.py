@@ -4,7 +4,7 @@ import hashlib
 import psycopg2
 from openai import OpenAI
 
-from retrieval.redis_cache import get_json, set_json
+from rag.retrieval.redis_cache import get_json, set_json
 
 
 def vector_literal(values: list[float]) -> str:
@@ -107,7 +107,7 @@ def fetch_vector_candidate_chunks(
     embedding_cache_enabled: bool = False,
     embedding_cache_redis_url: str = "redis://127.0.0.1:6379/0",
     embedding_cache_ttl_seconds: int = 86400,
-    embedding_cache_namespace: str = "health_rag",
+    embedding_cache_namespace: str = "insurance_rag",
 ) -> list[dict]:
     query_vector = embed_query(
         question,
@@ -291,7 +291,7 @@ def fetch_hybrid_candidate_chunks(
     embedding_cache_enabled: bool = False,
     embedding_cache_redis_url: str = "redis://127.0.0.1:6379/0",
     embedding_cache_ttl_seconds: int = 86400,
-    embedding_cache_namespace: str = "health_rag",
+    embedding_cache_namespace: str = "insurance_rag",
 ) -> list[dict]:
     vector_results = fetch_vector_candidate_chunks(
         question,
@@ -338,7 +338,7 @@ def fetch_candidate_chunks(
     embedding_cache_enabled: bool = False,
     embedding_cache_redis_url: str = "redis://127.0.0.1:6379/0",
     embedding_cache_ttl_seconds: int = 86400,
-    embedding_cache_namespace: str = "health_rag",
+    embedding_cache_namespace: str = "insurance_rag",
 ) -> list[dict]:
     return fetch_vector_candidate_chunks(
         question,
@@ -352,3 +352,4 @@ def fetch_candidate_chunks(
         embedding_cache_ttl_seconds=embedding_cache_ttl_seconds,
         embedding_cache_namespace=embedding_cache_namespace,
     )
+
