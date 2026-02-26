@@ -152,6 +152,18 @@ Copy-Item .env.example .env
 
 Canonical env var definitions live in `.env.example`:
 
+Optional Langfuse tracing:
+
+- `LANGFUSE_PUBLIC_KEY`
+- `LANGFUSE_SECRET_KEY`
+- `LANGFUSE_BASE_URL` (default: `https://cloud.langfuse.com`)
+- `LANGFUSE_TRACING_ENABLED` (default: `true`)
+
+When Langfuse keys are present, OpenAI SDK calls are automatically routed through
+Langfuse instrumentation.
+
+Note: On Python `3.14+`, this project pins Langfuse `4.x` prerelease for compatibility.
+
 ## Configuration (YAML)
 
 Defaults are centralized in `config/config.yaml`. CLI wrappers in `scripts/`, FastAPI (`api.app`), and Gradio (`ui.gradio_app`) all read from it.

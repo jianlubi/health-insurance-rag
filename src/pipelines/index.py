@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Iterable
 
 from dotenv import load_dotenv
-from openai import OpenAI
 import psycopg2
 from psycopg2.extras import execute_batch
 
 from core.config import get_config
+from core.openai_client import create_openai_client
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -30,7 +30,7 @@ def batched(items: list[dict], batch_size: int) -> Iterable[list[dict]]:
         yield items[i : i + batch_size]
 
 
-def embed_records(records: list[dict], client: OpenAI, model: str) -> list[list[float]]:
+def embed_records(records: list[dict], client, model: str) -> list[list[float]]:
     texts = [r["text"] for r in records]
     resp = client.embeddings.create(model=model, input=texts)
     return [item.embedding for item in resp.data]
@@ -136,7 +136,7 @@ def main() -> None:
         print("No records found in JSONL. Run ingest.py first.")
         return
 
-    client = OpenAI(api_key=openai_api_key)
+    client = create_openai_client(api_key=openai_api_key)
 
     # pgvector columns must declare a fixed dimension (vector(N)), so we embed
     # one batch first and infer N from the first embedding.

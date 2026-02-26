@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import re
-
-from openai import OpenAI
+from typing import Any
 
 from rag.retrieval.rerank_retriever import cosine_similarity
 
@@ -26,9 +25,10 @@ def sentence_window_chunks(
     question: str,
     chunks: list[dict],
     *,
-    client: OpenAI,
+    client: Any,
     model: str,
     window_size: int,
+    openai_request_kwargs: dict[str, Any] | None = None,
 ) -> list[dict]:
     if not chunks:
         return []
@@ -50,6 +50,7 @@ def sentence_window_chunks(
     resp = client.embeddings.create(
         model=model,
         input=[question, *[item[2] for item in sentence_records]],
+        **(openai_request_kwargs or {}),
     )
     vectors = [item.embedding for item in resp.data]
     query_vector = vectors[0]
