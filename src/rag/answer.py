@@ -9,16 +9,16 @@ from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from ambiguity import build_clarification_prompt, needs_clarification
-from citation import ensure_chunk_citation
-from config import get_config
-from rate_service import (
+from rag.ambiguity import build_clarification_prompt, needs_clarification
+from rag.citation import ensure_chunk_citation
+from core.config import get_config
+from services.rate_service import (
     BASE_BENEFIT_AMOUNT,
     DEFAULT_POLICY_ID,
     coerce_smoker,
     get_rate_quote,
 )
-from retrieve import retrieve_chunks
+from rag.retrieve import retrieve_chunks
 
 SYSTEM_PROMPT = (
     "You answer insurance-policy questions using ONLY the provided context. "
@@ -272,3 +272,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

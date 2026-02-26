@@ -11,7 +11,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-import rate_service  # noqa: E402
+from services import rate_service  # noqa: E402
 
 
 class FakeCursor:
@@ -85,7 +85,7 @@ class RateServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             rate_service.coerce_smoker("maybe")
 
-    @patch("rate_service.psycopg2.connect")
+    @patch("services.rate_service.psycopg2.connect")
     def test_get_rate_quote_calculates_monthly_premium(self, mock_connect) -> None:
         fake_cursor = FakeCursor(
             fetchone_values=[(31, 45, 42.0)],
@@ -106,7 +106,7 @@ class RateServiceTests(unittest.TestCase):
         self.assertEqual(quote["monthly_premium"], 48.3)
         self.assertEqual(quote["unknown_riders"], ["mystery"])
 
-    @patch("rate_service.psycopg2.connect")
+    @patch("services.rate_service.psycopg2.connect")
     def test_get_rate_quote_scales_for_benefit_amount(self, mock_connect) -> None:
         fake_cursor = FakeCursor(
             fetchone_values=[(31, 45, 60.0)],
@@ -125,7 +125,7 @@ class RateServiceTests(unittest.TestCase):
         self.assertEqual(quote["scaled_base_monthly_rate"], 120.0)
         self.assertEqual(quote["monthly_premium"], 144.0)
 
-    @patch("rate_service.psycopg2.connect")
+    @patch("services.rate_service.psycopg2.connect")
     def test_get_rate_quote_rejects_age_outside_configured_ranges(self, mock_connect) -> None:
         fake_cursor = FakeCursor(fetchone_values=[None, (18, 65)])
         mock_connect.return_value = FakeConnection(fake_cursor)
@@ -140,7 +140,7 @@ class RateServiceTests(unittest.TestCase):
 
         self.assertIn("supported range is 18-65", str(ctx.exception))
 
-    @patch("rate_service.psycopg2.connect")
+    @patch("services.rate_service.psycopg2.connect")
     def test_get_rate_quote_rejects_when_no_rates_configured(self, mock_connect) -> None:
         fake_cursor = FakeCursor(fetchone_values=[None, (None, None)])
         mock_connect.return_value = FakeConnection(fake_cursor)
@@ -173,8 +173,8 @@ class RateServiceTests(unittest.TestCase):
                 database_url="postgresql://fake",
             )
 
-    @patch("rate_service.execute_batch")
-    @patch("rate_service.psycopg2.connect")
+    @patch("services.rate_service.execute_batch")
+    @patch("services.rate_service.psycopg2.connect")
     def test_seed_default_rates_upserts_bands_and_riders(
         self,
         mock_connect,

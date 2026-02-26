@@ -9,16 +9,16 @@ from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from config import get_config
-from retrieval.auto_merging_retriever import auto_merge_chunks
-from retrieval.chunk_retriever import (
+from core.config import get_config
+from rag.retrieval.auto_merging_retriever import auto_merge_chunks
+from rag.retrieval.chunk_retriever import (
     fetch_candidate_chunks,
     fetch_hybrid_candidate_chunks,
 )
-from retrieval.llm_rerank_retriever import llm_rerank_chunks
-from retrieval.redis_cache import get_json, set_json
-from retrieval.rerank_retriever import rerank_chunks
-from retrieval.sentence_window_retriever import sentence_window_chunks
+from rag.retrieval.llm_rerank_retriever import llm_rerank_chunks
+from rag.retrieval.redis_cache import get_json, set_json
+from rag.retrieval.rerank_retriever import rerank_chunks
+from rag.retrieval.sentence_window_retriever import sentence_window_chunks
 
 
 def _normalize_question(question: str) -> str:
@@ -492,3 +492,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

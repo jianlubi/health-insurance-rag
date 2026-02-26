@@ -4,7 +4,7 @@ import re
 
 from openai import OpenAI
 
-from retrieval.rerank_retriever import cosine_similarity
+from rag.retrieval.rerank_retriever import cosine_similarity
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -85,4 +85,5 @@ def sentence_window_chunks(
 
     windowed.sort(key=lambda c: c.get("sentence_window_score", 0.0), reverse=True)
     return windowed
+
 

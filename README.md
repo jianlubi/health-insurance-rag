@@ -57,25 +57,33 @@ config/
   config.yaml               # Runtime defaults for models/retrieval/eval/ingest/index/ui
 notes/                      # Project notes and experiment logs
 src/
-  config.py                 # Config loader + defaults + deep merge
-  retrieval/
-    chunk_retriever.py      # Vector/keyword candidate retrieval + hybrid fusion
-    rerank_retriever.py     # Reranking logic
-    llm_rerank_retriever.py # LLM-based reranking logic
-    auto_merging_retriever.py  # Adjacent-chunk auto merge logic
-    sentence_window_retriever.py  # Sentence-window selection logic
-  chunking.py               # Chunking logic
-  ingest.py                 # Build chunks JSONL from policies
-  index.py                  # Embed + index chunks into pgvector
-  retrieve.py               # Retrieval orchestrator
-  ambiguity.py              # Ambiguity detection/clarification prompts
-  answer.py                 # Single-question answer flow
-  rate_service.py           # DB-backed premium rating logic
-  seed_rates.py             # Create/seed rate tables
-  eval.py                   # Batch evaluator
-  report_eval.py            # Eval summary report
-  api.py                    # FastAPI service
-  gradio_app.py             # Gradio frontend
+  api/
+    app.py                  # FastAPI service
+  core/
+    config.py               # Config loader + defaults + deep merge
+    chunking.py             # Chunking logic
+  rag/
+    retrieve.py             # Retrieval orchestrator
+    answer.py               # Single-question answer flow
+    ambiguity.py            # Ambiguity detection/clarification prompts
+    citation.py             # Citation normalization/validation
+    retrieval/
+      chunk_retriever.py      # Vector/keyword candidate retrieval + hybrid fusion
+      rerank_retriever.py     # Embedding reranking logic
+      llm_rerank_retriever.py # LLM-based reranking logic
+      auto_merging_retriever.py   # Adjacent-chunk auto merge logic
+      sentence_window_retriever.py # Sentence-window selection logic
+  services/
+    rate_service.py         # DB-backed premium rating logic
+    seed_rates.py           # Create/seed rate tables
+  pipelines/
+    ingest.py               # Build chunks JSONL from policies
+    index.py                # Embed + index chunks into pgvector
+    eval.py                 # Batch evaluator
+    report_eval.py          # Eval summary report
+  ui/
+    gradio_app.py           # Gradio frontend
+scripts/                    # Lightweight wrappers for CLI entrypoints
 ```
 
 ## Requirements
@@ -141,7 +149,7 @@ REDIS_URL=redis://127.0.0.1:6379/0
 
 ## Configuration (YAML)
 
-Defaults are centralized in `config/config.yaml`. The scripts (`ingest.py`, `index.py`, `retrieve.py`, `answer.py`, `eval.py`, `report_eval.py`), FastAPI (`api.py`), and Gradio (`gradio_app.py`) all read from it.
+Defaults are centralized in `config/config.yaml`. CLI wrappers in `scripts/`, FastAPI (`api.app`), and Gradio (`ui.gradio_app`) all read from it.
 
 Optional override file location:
 
@@ -156,44 +164,44 @@ CLI flags still override YAML values for one-off runs.
 1. Generate chunks from policy markdown:
 
 ```powershell
-venv\Scripts\python src\ingest.py
+venv\Scripts\python scripts\ingest.py
 ```
 
 2. Index chunks into pgvector:
 
 ```powershell
-venv\Scripts\python src\index.py
+venv\Scripts\python scripts\index.py
 ```
 
 3. Create/seed DB rate tables (required for premium quotes):
 
 ```powershell
-venv\Scripts\python src\seed_rates.py
+venv\Scripts\python scripts\seed_rates.py
 ```
 
 4. Ask one question via CLI:
 
 ```powershell
-venv\Scripts\python src\answer.py "What illnesses are covered by this policy?"
+venv\Scripts\python scripts\answer.py "What illnesses are covered by this policy?"
 ```
 
 Example with custom retrieval depth:
 
 ```powershell
-venv\Scripts\python src\answer.py --top-k 6 "What illnesses are covered by this policy?"
+venv\Scripts\python scripts\answer.py --top-k 6 "What illnesses are covered by this policy?"
 ```
 
 5. Run evaluation:
 
 ```powershell
-venv\Scripts\python src\eval.py
-venv\Scripts\python src\report_eval.py
+venv\Scripts\python scripts\eval.py
+venv\Scripts\python scripts\report_eval.py
 ```
 
 Example with custom eval settings:
 
 ```powershell
-venv\Scripts\python src\eval.py --top-k 6 --max-questions 30
+venv\Scripts\python scripts\eval.py --top-k 6 --max-questions 30
 ```
 
 ## FastAPI Backend
@@ -201,7 +209,7 @@ venv\Scripts\python src\eval.py --top-k 6 --max-questions 30
 Start API server:
 
 ```powershell
-venv\Scripts\uvicorn api:app --app-dir src --reload
+venv\Scripts\uvicorn api.app:app --app-dir src --reload
 ```
 
 Default URL: `http://127.0.0.1:8000`
@@ -235,7 +243,7 @@ Invoke-RestMethod http://127.0.0.1:8000/ask -Method Post -ContentType "applicati
 Start UI:
 
 ```powershell
-venv\Scripts\python src\gradio_app.py --host 127.0.0.1 --port 7860
+venv\Scripts\python scripts\gradio_app.py --host 127.0.0.1 --port 7860
 ```
 
 Open: `http://127.0.0.1:7860`
@@ -246,7 +254,7 @@ Tabs:
 
 ## Retrieval and Reranking
 
-Retrieval flow (`src/retrieve.py`):
+Retrieval flow (`src/rag/retrieve.py`):
 1. Embed query with `text-embedding-3-small`
 2. Fetch candidates from pgvector (`candidate_k`, default 12)
 3. Optional hybrid mode: fetch keyword candidates and fuse vector + keyword ranks with RRF
@@ -289,7 +297,7 @@ Query-embedding cache (Redis):
 - `cache.retrieval_enabled` (default: `true`)
 - `cache.retrieval_ttl_seconds` (default: `300`)
 - `cache.retrieval_version` (default: `v1`, bump to invalidate retrieval cache)
-- `cache.key_prefix` (default: `health_rag`)
+- `cache.key_prefix` (default: `insurance_rag`)
 
 ## Notes
 

@@ -4,8 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
-from chunking import chunk_policy_file
-from config import get_config
+from core.chunking import chunk_policy_file
+from core.config import get_config
 
 
 def build_records(
@@ -113,3 +113,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
