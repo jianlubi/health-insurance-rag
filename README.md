@@ -87,6 +87,10 @@ flowchart LR;
 
 ![Eval Report](docs/images/eval-report.png)
 
+### Agent Eval Snapshot
+
+![Agent Eval Snapshot](docs/images/agent-eval-snapshot.png)
+
 ### Retriever Comparison
 
 ![Retriever Comparison](docs/images/retriever-comparison.png)
@@ -102,6 +106,7 @@ flowchart LR;
 - Deterministic eligibility service + DB-backed premium rating + eligibility-gated quote generation
 - Agentic request routing across `rag`, `eligibility`, `quote`, and `rate` services
 - Batch evaluation + reporting scripts
+- Agent routing + tool correctness evaluation for `eligibility`, `rate`, and `quote`
 - API and UI for interactive usage
 
 ## Current Eval Snapshot
@@ -112,6 +117,16 @@ From `data/eval/eval_results.jsonl` (latest run):
 - Insufficient-context: `7/60 (11.7%)`
 - Failures: `0/60 (0.0%)`
 - Clarifying-question asked: `5/5 (100.0%)`
+
+## Agent Eval Snapshot
+
+From `data/eval/agent_eval_results.jsonl` (latest run):
+- Routing accuracy: `12/12 (100.0%)`
+- Tool correctness: `8/8 (100.0%)`
+- Clarification correctness: `2/2 (100.0%)`
+- Answer-content checks: `5/5 (100.0%)`
+- Overall pass rate: `12/12 (100.0%)`
+- Failure rate: `0/12 (0.0%)`
 
 ## Project Structure
 
@@ -284,12 +299,14 @@ venv\Scripts\python scripts\answer.py --top-k 6 "What illnesses are covered by t
 ```powershell
 venv\Scripts\python scripts\eval.py
 venv\Scripts\python scripts\report_eval.py
+venv\Scripts\python scripts\eval_agent.py
 ```
 
 Example with custom eval settings:
 
 ```powershell
 venv\Scripts\python scripts\eval.py --top-k 6 --max-questions 60
+venv\Scripts\python scripts\eval_agent.py --max-questions 12 --routing-mode fallback
 ```
 
 ## FastAPI Backend

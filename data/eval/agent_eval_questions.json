@@ -1,0 +1,105 @@
+[
+  {
+    "question": "What are the main exclusions in this policy?",
+    "expected_route": "rag",
+    "category": "routing"
+  },
+  {
+    "question": "Am I covered for this?",
+    "expected_route": "rag",
+    "expected_needs_clarification": true,
+    "category": "routing"
+  },
+  {
+    "question": "Please check eligibility for age 42.",
+    "expected_route": "eligibility",
+    "expected_tool": "eligibility",
+    "expected_tool_called": true,
+    "expected_service_keys": ["eligible", "reasons", "evaluated_rules"],
+    "category": "routing_and_tool"
+  },
+  {
+    "question": "Can I get a quote?",
+    "expected_route": "quote",
+    "expected_tool": "quote",
+    "expected_tool_called": false,
+    "expected_answer_contains": [
+      "i can generate that quote",
+      "your age",
+      "whether you are a smoker"
+    ],
+    "category": "tool_correctness"
+  },
+  {
+    "question": "Can you quote me? I am 42, smoker, with a pre-existing condition and currently hospitalized.",
+    "expected_route": "quote",
+    "expected_tool": "quote",
+    "expected_tool_called": true,
+    "expected_quote_status": "rejected",
+    "expected_rate_quote_is_none": true,
+    "expected_service_keys": ["status", "eligibility", "rate_quote", "application_url"],
+    "category": "tool_correctness"
+  },
+  {
+    "question": "Rate this plan for age 42.",
+    "expected_route": "rate",
+    "expected_tool": "rate",
+    "expected_tool_called": false,
+    "expected_answer_contains": [
+      "whether you are a smoker"
+    ],
+    "category": "tool_correctness"
+  },
+  {
+    "question": "I need a premium rate as a non-smoker.",
+    "expected_route": "rate",
+    "expected_tool": "rate",
+    "expected_tool_called": false,
+    "expected_answer_contains": [
+      "your age"
+    ],
+    "category": "tool_correctness"
+  },
+  {
+    "question": "Can you check if I qualify? I am 70 years old.",
+    "expected_route": "eligibility",
+    "expected_tool": "eligibility",
+    "expected_tool_called": true,
+    "expected_service_keys": ["eligible", "reasons", "evaluated_rules"],
+    "category": "tool_correctness"
+  },
+  {
+    "question": "How do I submit a claim?",
+    "expected_route": "rag",
+    "category": "routing"
+  },
+  {
+    "question": "How much would I get?",
+    "expected_route": "rag",
+    "expected_needs_clarification": true,
+    "category": "routing"
+  },
+  {
+    "question": "Give me pricing details for this policy.",
+    "expected_route": "quote",
+    "expected_tool": "quote",
+    "expected_tool_called": false,
+    "expected_answer_contains": [
+      "i can generate that quote",
+      "your age",
+      "whether you are a smoker"
+    ],
+    "category": "routing_and_tool"
+  },
+  {
+    "question": "Rate table info for age band and smoker loading.",
+    "expected_route": "rate",
+    "expected_tool": "rate",
+    "expected_tool_called": false,
+    "expected_answer_contains": [
+      "your age",
+      "whether you are a smoker"
+    ],
+    "category": "routing_and_tool"
+  }
+]
