@@ -85,7 +85,7 @@ flowchart LR;
 
 ### Eval Report
 
-![Eval Report](docs/images/eval-report.png)
+![Eval Report](docs/images/eval-report.png?v=20260301)
 
 ### Agent Eval Snapshot
 
