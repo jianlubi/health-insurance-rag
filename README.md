@@ -19,28 +19,6 @@ Built with:
 
 The dataset in `data/policies/` is synthetic for demo/testing.
 
-## Features
-
-- Two-part experience: **Policy Q&A** + **Get a Quote**
-- Section-aware markdown chunking with optional auto-merging and sentence-window retrieval strategies
-- Vector or hybrid (vector + keyword) retrieval with optional embedding rerank + LLM rerank
-- Clarifying-question behavior for ambiguous prompts
-- Grounded answers with chunk-id citations
-- Agentic quote workflow with three tools: `rate`, `eligibility`, `quote`
-- Deterministic eligibility service + DB-backed premium rating + eligibility-gated quote generation
-- Agentic request routing across `rag`, `eligibility`, `quote`, and `rate` services
-- Batch evaluation + reporting scripts
-- API and UI for interactive usage
-
-## Current Eval Snapshot
-
-From `data/eval/eval_results.jsonl` (latest run):
-- Retrieval hit: `20/20 (100.0%)`
-- Grounded: `20/20 (100.0%)`
-- Insufficient-context: `5/30 (16.7%)`
-- Failures: `0/30 (0.0%)`
-- Clarifying-question asked: `5/5 (100.0%)`
-
 ## Screenshots
 
 ### Gradio Ask
@@ -76,6 +54,28 @@ From `data/eval/eval_results.jsonl` (latest run):
 ### Retriever Comparison
 
 ![Retriever Comparison](docs/images/retriever-comparison.png)
+
+## Features
+
+- Two-part experience: **Policy Q&A** + **Get a Quote**
+- Section-aware markdown chunking with optional auto-merging and sentence-window retrieval strategies
+- Vector or hybrid (vector + keyword) retrieval with optional embedding rerank + LLM rerank
+- Clarifying-question behavior for ambiguous prompts
+- Grounded answers with chunk-id citations
+- Agentic quote workflow with three tools: `rate`, `eligibility`, `quote`
+- Deterministic eligibility service + DB-backed premium rating + eligibility-gated quote generation
+- Agentic request routing across `rag`, `eligibility`, `quote`, and `rate` services
+- Batch evaluation + reporting scripts
+- API and UI for interactive usage
+
+## Current Eval Snapshot
+
+From `data/eval/eval_results.jsonl` (latest run):
+- Retrieval hit: `47/47 (100.0%)`
+- Grounded: `47/47 (100.0%)`
+- Insufficient-context: `7/60 (11.7%)`
+- Failures: `0/60 (0.0%)`
+- Clarifying-question asked: `5/5 (100.0%)`
 
 ## Project Structure
 
@@ -253,7 +253,7 @@ venv\Scripts\python scripts\report_eval.py
 Example with custom eval settings:
 
 ```powershell
-venv\Scripts\python scripts\eval.py --top-k 6 --max-questions 30
+venv\Scripts\python scripts\eval.py --top-k 6 --max-questions 60
 ```
 
 ## FastAPI Backend
