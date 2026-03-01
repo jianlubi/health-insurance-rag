@@ -53,6 +53,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "top_k": 4,
         "max_questions": 60,
     },
+    "eval_agent": {
+        "questions_path": "data/eval/agent_eval_questions.json",
+        "output_path": "data/eval/agent_eval_results.jsonl",
+        "max_questions": 20,
+    },
     "ingest": {
         "policies_dir": "data/policies",
         "output_path": "data/chunks/policy_chunks.jsonl",
