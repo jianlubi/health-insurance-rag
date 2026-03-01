@@ -240,5 +240,272 @@
     "expected_sections": [],
     "category": "not_available",
     "expected_behavior": "not_available"
+  },
+  {
+    "question": "If I was issued at age 64 and keep paying, does coverage continue after I turn 75 if no claim was ever paid?",
+    "expected_sections": [
+      "SECTION 2",
+      "SECTION 9",
+      "SECTION 0"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "My diagnosis happened on day 88 after the effective date and I survived 45 days. Is that payable?",
+    "expected_sections": [
+      "SECTION 1",
+      "SECTION 4",
+      "SECTION 6"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "I submitted the claim form and physician report but not full medical records. Does the 30-business-day processing window already start?",
+    "expected_sections": [
+      "SECTION 7"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If DemoLife requests an independent medical exam and I refuse, does the policy explicitly say the claim is automatically denied?",
+    "expected_sections": [],
+    "category": "not_available",
+    "expected_behavior": "not_available"
+  },
+  {
+    "question": "My policy lapsed, I reinstated at month 11, and got diagnosed 20 days later. What policy rules block payment?",
+    "expected_sections": [
+      "SECTION 3",
+      "SECTION 1",
+      "SECTION 4",
+      "SECTION 6"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If I first get an early-stage cancer rider payout, then later a major cancer diagnosis, how much remains payable under the policy?",
+    "expected_sections": [
+      "SECTION 5",
+      "SECTION 4"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "After a full critical illness benefit is paid once, can I claim again later for stroke under the same policy?",
+    "expected_sections": [
+      "SECTION 5",
+      "SECTION 9"
+    ],
+    "category": "edge",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If I had symptoms 18 months before the effective date but no diagnosis then, does that still fit the pre-existing condition rule?",
+    "expected_sections": [
+      "SECTION 1",
+      "SECTION 6"
+    ],
+    "category": "edge",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "My denial appeal was filed on day 75 with new records. Does the policy require a secondary review at that point?",
+    "expected_sections": [
+      "SECTION 8"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "I was diagnosed during the grace period, but the premium stayed unpaid after day 30. Is that claim still valid?",
+    "expected_sections": [
+      "SECTION 3",
+      "SECTION 9",
+      "SECTION 4",
+      "SECTION 1"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If material misrepresentation is discovered in policy year 3, can the policy still be voided or only adjusted?",
+    "expected_sections": [
+      "SECTION 2",
+      "SECTION 9"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "What exact evidence standard does the policy require to confirm a diagnosis for benefit payment?",
+    "expected_sections": [
+      "SECTION 1",
+      "SECTION 4",
+      "SECTION 7"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If the insured dies 31 days after diagnosis, does the survival requirement pass for full payout eligibility?",
+    "expected_sections": [
+      "SECTION 1",
+      "SECTION 5"
+    ],
+    "category": "edge",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "Does choosing monthly versus annual premium mode change grace-period rights or lapse rules?",
+    "expected_sections": [
+      "SECTION 3",
+      "SECTION 0"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If fraud is only suspected but not proven, what immediate actions can DemoLife take on claim processing?",
+    "expected_sections": [
+      "SECTION 8",
+      "SECTION 9"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "Can I request the full benefit to be paid in installments instead of a lump sum?",
+    "expected_sections": [
+      "SECTION 5"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "Can the policyholder be different from the insured person, and who is responsible for premium payment and claim submission?",
+    "expected_sections": [
+      "SECTION 1",
+      "SECTION 7"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If both exclusion 6.1 and 6.2 could apply, does the policy define which exclusion takes precedence?",
+    "expected_sections": [],
+    "category": "not_available",
+    "expected_behavior": "not_available"
+  },
+  {
+    "question": "I quit smoking after issue. Does this policy allow mid-term premium re-rating from smoker to non-smoker?",
+    "expected_sections": [],
+    "category": "not_available",
+    "expected_behavior": "not_available"
+  },
+  {
+    "question": "For a 47-year-old smoker with a $100,000 benefit and Early-Stage Cancer Rider, what premium components should be applied before underwriting adjustments?",
+    "expected_sections": [
+      "SECTION 10",
+      "SECTION 3"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If my premium is paid 25 days after the due date and I was diagnosed on day 20 of the grace period, is the claim valid?",
+    "expected_sections": [
+      "SECTION 3",
+      "SECTION 1",
+      "SECTION 4",
+      "SECTION 9"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "Can a lapsed policy be reinstated after 13 months if I pay everything owed today?",
+    "expected_sections": [
+      "SECTION 3"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If I pay all overdue premiums but refuse to provide evidence of insurability, can reinstatement still be approved?",
+    "expected_sections": [
+      "SECTION 3"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If diagnosis occurs on day 95 after the effective date but the insured dies 25 days later, is any benefit payable?",
+    "expected_sections": [
+      "SECTION 1",
+      "SECTION 4",
+      "SECTION 5"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If I receive an early-stage cancer rider payout and then cancel the policy in writing, can I later claim the remaining amount for major cancer?",
+    "expected_sections": [
+      "SECTION 5",
+      "SECTION 9"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "After a full benefit payout, if premiums are still paid by mistake and a new covered illness occurs, can another claim be made?",
+    "expected_sections": [
+      "SECTION 5",
+      "SECTION 9",
+      "SECTION 4"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "For a 34-year-old non-smoker with a $100,000 benefit choosing both Early-Stage Cancer and Return of Premium riders, what premium components apply before underwriting adjustments?",
+    "expected_sections": [
+      "SECTION 10",
+      "SECTION 3"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If a denied claim is appealed within 60 days with new medical evidence, what follow-up review does the policy require?",
+    "expected_sections": [
+      "SECTION 8",
+      "SECTION 7"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If initial claim documents are submitted but additional records and an independent exam are later requested, when does the 30-business-day processing clock start?",
+    "expected_sections": [
+      "SECTION 7"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
+  },
+  {
+    "question": "If an illness is linked to both an undisclosed pre-existing condition and a hazardous activity not disclosed at application, is the claim payable under this policy?",
+    "expected_sections": [
+      "SECTION 6",
+      "SECTION 1",
+      "SECTION 2"
+    ],
+    "category": "complex",
+    "expected_behavior": "answerable"
   }
 ]

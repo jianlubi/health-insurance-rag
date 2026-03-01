@@ -51,7 +51,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "questions_path": "data/eval/test_questions.json",
         "output_path": "data/eval/eval_results.jsonl",
         "top_k": 4,
-        "max_questions": 30,
+        "max_questions": 60,
     },
     "ingest": {
         "policies_dir": "data/policies",
