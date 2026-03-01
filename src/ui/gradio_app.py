@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import uuid
 
 from fastapi import HTTPException
 import gradio as gr
 
-from api.app import AskRequest, RetrieveRequest, ask, retrieve
+from api.app import AskRequest, RetrieveRequest, ask, assistant_ask, retrieve
 from core.config import get_config
 
 
@@ -65,6 +66,53 @@ def _chunk_rows(chunks: list | None) -> list[list]:
     return rows
 
 
+def _build_ask_request(
+    *,
+    question: str,
+    top_k: int,
+    candidate_k: int,
+    use_hybrid_search: bool,
+    keyword_candidate_k: int,
+    hybrid_alpha: float,
+    hybrid_rrf_k: int,
+    use_rerank: bool,
+    use_llm_rerank: bool,
+    llm_rerank_candidate_k: int,
+    llm_rerank_keep_k: int,
+    use_auto_merging: bool,
+    auto_merge_max_gap: int,
+    auto_merge_max_chunks: int,
+    use_sentence_window: bool,
+    sentence_window_size: int,
+    model: str,
+    include_chunks: bool,
+    include_service_result: bool,
+    session_id: str | None = None,
+) -> AskRequest:
+    return AskRequest(
+        question=question,
+        session_id=session_id,
+        top_k=int(top_k),
+        candidate_k=int(candidate_k),
+        use_hybrid_search=use_hybrid_search,
+        keyword_candidate_k=int(keyword_candidate_k),
+        hybrid_alpha=float(hybrid_alpha),
+        hybrid_rrf_k=int(hybrid_rrf_k),
+        use_rerank=use_rerank,
+        use_llm_rerank=use_llm_rerank,
+        llm_rerank_candidate_k=int(llm_rerank_candidate_k),
+        llm_rerank_keep_k=int(llm_rerank_keep_k),
+        use_auto_merging=use_auto_merging,
+        auto_merge_max_gap=int(auto_merge_max_gap),
+        auto_merge_max_chunks=int(auto_merge_max_chunks),
+        use_sentence_window=use_sentence_window,
+        sentence_window_size=int(sentence_window_size),
+        model=model,
+        include_chunks=include_chunks,
+        include_service_result=include_service_result,
+    )
+
+
 def run_ask(
     question: str,
     top_k: int,
@@ -84,28 +132,32 @@ def run_ask(
     sentence_window_size: int,
     model: str,
     include_chunks: bool,
+    include_service_result: bool,
+    session_id: str,
 ) -> tuple[str, str, list[list]]:
     try:
         response = ask(
-            AskRequest(
+            _build_ask_request(
                 question=question,
-                top_k=int(top_k),
-                candidate_k=int(candidate_k),
+                top_k=top_k,
+                candidate_k=candidate_k,
                 use_hybrid_search=use_hybrid_search,
-                keyword_candidate_k=int(keyword_candidate_k),
-                hybrid_alpha=float(hybrid_alpha),
-                hybrid_rrf_k=int(hybrid_rrf_k),
+                keyword_candidate_k=keyword_candidate_k,
+                hybrid_alpha=hybrid_alpha,
+                hybrid_rrf_k=hybrid_rrf_k,
                 use_rerank=use_rerank,
                 use_llm_rerank=use_llm_rerank,
-                llm_rerank_candidate_k=int(llm_rerank_candidate_k),
-                llm_rerank_keep_k=int(llm_rerank_keep_k),
+                llm_rerank_candidate_k=llm_rerank_candidate_k,
+                llm_rerank_keep_k=llm_rerank_keep_k,
                 use_auto_merging=use_auto_merging,
-                auto_merge_max_gap=int(auto_merge_max_gap),
-                auto_merge_max_chunks=int(auto_merge_max_chunks),
+                auto_merge_max_gap=auto_merge_max_gap,
+                auto_merge_max_chunks=auto_merge_max_chunks,
                 use_sentence_window=use_sentence_window,
-                sentence_window_size=int(sentence_window_size),
+                sentence_window_size=sentence_window_size,
                 model=model,
                 include_chunks=include_chunks,
+                include_service_result=include_service_result,
+                session_id=session_id,
             )
         )
     except HTTPException as exc:
@@ -114,6 +166,7 @@ def run_ask(
         return "", json.dumps({"error": str(exc)}, indent=2), []
 
     meta = {
+        "route": response.route,
         "needs_clarification": response.needs_clarification,
         "retrieved_count": response.retrieved_count,
         "top_k": response.top_k,
@@ -132,9 +185,83 @@ def run_ask(
         "use_sentence_window": response.use_sentence_window,
         "sentence_window_size": response.sentence_window_size,
         "model": model,
+        "session_id": session_id,
+        "service_result_included": include_service_result,
     }
     rows = _chunk_rows(response.chunks) if include_chunks else []
     return response.answer, json.dumps(meta, indent=2), rows
+
+
+def run_assistant(
+    question: str,
+    top_k: int,
+    candidate_k: int,
+    use_hybrid_search: bool,
+    keyword_candidate_k: int,
+    hybrid_alpha: float,
+    hybrid_rrf_k: int,
+    use_rerank: bool,
+    use_llm_rerank: bool,
+    llm_rerank_candidate_k: int,
+    llm_rerank_keep_k: int,
+    use_auto_merging: bool,
+    auto_merge_max_gap: int,
+    auto_merge_max_chunks: int,
+    use_sentence_window: bool,
+    sentence_window_size: int,
+    model: str,
+    include_chunks: bool,
+    include_service_result: bool,
+    session_id: str,
+) -> tuple[str, str, str, str, list[list]]:
+    try:
+        response = assistant_ask(
+            _build_ask_request(
+                question=question,
+                top_k=top_k,
+                candidate_k=candidate_k,
+                use_hybrid_search=use_hybrid_search,
+                keyword_candidate_k=keyword_candidate_k,
+                hybrid_alpha=hybrid_alpha,
+                hybrid_rrf_k=hybrid_rrf_k,
+                use_rerank=use_rerank,
+                use_llm_rerank=use_llm_rerank,
+                llm_rerank_candidate_k=llm_rerank_candidate_k,
+                llm_rerank_keep_k=llm_rerank_keep_k,
+                use_auto_merging=use_auto_merging,
+                auto_merge_max_gap=auto_merge_max_gap,
+                auto_merge_max_chunks=auto_merge_max_chunks,
+                use_sentence_window=use_sentence_window,
+                sentence_window_size=sentence_window_size,
+                model=model,
+                include_chunks=include_chunks,
+                include_service_result=include_service_result,
+                session_id=session_id,
+            )
+        )
+    except HTTPException as exc:
+        error_json = json.dumps({"error": exc.detail}, indent=2)
+        return "", "", error_json, "{}", []
+    except Exception as exc:
+        error_json = json.dumps({"error": str(exc)}, indent=2)
+        return "", "", error_json, "{}", []
+
+    meta = {
+        "route": response.route,
+        "needs_clarification": response.needs_clarification,
+        "retrieved_count": response.retrieved_count,
+        "model": model,
+        "session_id": session_id,
+    }
+    service_payload = response.service_result if include_service_result else None
+    rows = _chunk_rows(response.chunks) if include_chunks else []
+    return (
+        response.route,
+        response.answer,
+        json.dumps(meta, indent=2),
+        json.dumps(service_payload, indent=2),
+        rows,
+    )
 
 
 def run_retrieve(
@@ -204,8 +331,180 @@ def run_retrieve(
 
 def build_demo() -> gr.Blocks:
     with gr.Blocks(title="Health Insurance RAG") as demo:
-        gr.Markdown("# Health Insurance RAG")
-        gr.Markdown("Ask policy questions or inspect retrieval output.")
+        session_id_state = gr.State(value=str(uuid.uuid4()))
+        gr.Markdown("# Health Insurance AI Assistant")
+        gr.Markdown("Use agentic routing or inspect retrieval output.")
+
+        with gr.Tab("Assistant"):
+            assistant_question = gr.Textbox(
+                label="Question",
+                lines=2,
+                placeholder="e.g. I am 42 and non-smoker, can I get a quote?",
+            )
+            with gr.Row():
+                assistant_top_k = gr.Slider(
+                    label="top_k",
+                    minimum=1,
+                    maximum=20,
+                    value=int(RETRIEVAL_CFG["top_k"]),
+                    step=1,
+                )
+                assistant_candidate_k = gr.Slider(
+                    label="candidate_k",
+                    minimum=1,
+                    maximum=100,
+                    value=int(RETRIEVAL_CFG["candidate_k"]),
+                    step=1,
+                )
+            with gr.Row():
+                assistant_use_hybrid_search = gr.Checkbox(
+                    label="Use hybrid search",
+                    value=bool(RETRIEVAL_CFG["use_hybrid_search"]),
+                )
+                assistant_keyword_candidate_k = gr.Slider(
+                    label="keyword_candidate_k",
+                    minimum=1,
+                    maximum=100,
+                    value=int(RETRIEVAL_CFG["keyword_candidate_k"]),
+                    step=1,
+                )
+                assistant_hybrid_alpha = gr.Slider(
+                    label="hybrid_alpha",
+                    minimum=0.0,
+                    maximum=1.0,
+                    value=float(RETRIEVAL_CFG["hybrid_alpha"]),
+                    step=0.05,
+                )
+                assistant_hybrid_rrf_k = gr.Slider(
+                    label="hybrid_rrf_k",
+                    minimum=1,
+                    maximum=200,
+                    value=int(RETRIEVAL_CFG["hybrid_rrf_k"]),
+                    step=1,
+                )
+            with gr.Row():
+                assistant_use_rerank = gr.Checkbox(
+                    label="Use rerank", value=bool(RETRIEVAL_CFG["use_rerank"])
+                )
+                assistant_use_llm_rerank = gr.Checkbox(
+                    label="Use LLM rerank",
+                    value=bool(RETRIEVAL_CFG["use_llm_rerank"]),
+                )
+                assistant_llm_rerank_candidate_k = gr.Slider(
+                    label="llm_rerank_candidate_k",
+                    minimum=1,
+                    maximum=50,
+                    value=int(RETRIEVAL_CFG["llm_rerank_candidate_k"]),
+                    step=1,
+                )
+                assistant_llm_rerank_keep_k = gr.Slider(
+                    label="llm_rerank_keep_k",
+                    minimum=1,
+                    maximum=20,
+                    value=int(RETRIEVAL_CFG["llm_rerank_keep_k"]),
+                    step=1,
+                )
+            with gr.Row():
+                assistant_use_auto_merging = gr.Checkbox(
+                    label="Use auto merging",
+                    value=bool(RETRIEVAL_CFG["use_auto_merging"]),
+                )
+                assistant_auto_merge_max_gap = gr.Slider(
+                    label="auto_merge_max_gap",
+                    minimum=0,
+                    maximum=5,
+                    value=int(RETRIEVAL_CFG["auto_merge_max_gap"]),
+                    step=1,
+                )
+                assistant_auto_merge_max_chunks = gr.Slider(
+                    label="auto_merge_max_chunks",
+                    minimum=1,
+                    maximum=10,
+                    value=int(RETRIEVAL_CFG["auto_merge_max_chunks"]),
+                    step=1,
+                )
+            with gr.Row():
+                assistant_use_sentence_window = gr.Checkbox(
+                    label="Use sentence window",
+                    value=bool(RETRIEVAL_CFG["use_sentence_window"]),
+                )
+                assistant_sentence_window_size = gr.Slider(
+                    label="sentence_window_size",
+                    minimum=0,
+                    maximum=5,
+                    value=int(RETRIEVAL_CFG["sentence_window_size"]),
+                    step=1,
+                )
+            with gr.Row():
+                assistant_include_chunks = gr.Checkbox(label="Include chunks", value=False)
+                assistant_include_service_result = gr.Checkbox(
+                    label="Include service result",
+                    value=True,
+                )
+            assistant_model = gr.Textbox(
+                label="LLM model", value=str(MODELS_CFG["answer_model"])
+            )
+            assistant_btn = gr.Button("Run Assistant")
+
+            assistant_route = gr.Textbox(label="Route")
+            assistant_answer = gr.Textbox(label="Answer", lines=10)
+            assistant_meta = gr.Code(label="Metadata", language="json")
+            assistant_service = gr.Code(label="Service Result", language="json")
+            assistant_chunks = gr.Dataframe(
+                headers=CHUNK_HEADERS,
+                datatype=[
+                    "str",
+                    "number",
+                    "str",
+                    "str",
+                    "number",
+                    "number",
+                    "number",
+                    "number",
+                    "number",
+                    "number",
+                    "number",
+                    "number",
+                    "number",
+                    "bool",
+                    "number",
+                ],
+                label="Retrieved Chunks",
+                interactive=False,
+            )
+
+            assistant_btn.click(
+                run_assistant,
+                inputs=[
+                    assistant_question,
+                    assistant_top_k,
+                    assistant_candidate_k,
+                    assistant_use_hybrid_search,
+                    assistant_keyword_candidate_k,
+                    assistant_hybrid_alpha,
+                    assistant_hybrid_rrf_k,
+                    assistant_use_rerank,
+                    assistant_use_llm_rerank,
+                    assistant_llm_rerank_candidate_k,
+                    assistant_llm_rerank_keep_k,
+                    assistant_use_auto_merging,
+                    assistant_auto_merge_max_gap,
+                    assistant_auto_merge_max_chunks,
+                    assistant_use_sentence_window,
+                    assistant_sentence_window_size,
+                    assistant_model,
+                    assistant_include_chunks,
+                    assistant_include_service_result,
+                    session_id_state,
+                ],
+                outputs=[
+                    assistant_route,
+                    assistant_answer,
+                    assistant_meta,
+                    assistant_service,
+                    assistant_chunks,
+                ],
+            )
 
         with gr.Tab("Ask"):
             ask_question = gr.Textbox(
@@ -309,6 +608,10 @@ def build_demo() -> gr.Blocks:
                 )
             with gr.Row():
                 ask_include_chunks = gr.Checkbox(label="Include chunks", value=False)
+                ask_include_service_result = gr.Checkbox(
+                    label="Include service result",
+                    value=False,
+                )
             ask_model = gr.Textbox(
                 label="LLM model", value=str(MODELS_CFG["answer_model"])
             )
@@ -360,6 +663,8 @@ def build_demo() -> gr.Blocks:
                     ask_sentence_window_size,
                     ask_model,
                     ask_include_chunks,
+                    ask_include_service_result,
+                    session_id_state,
                 ],
                 outputs=[ask_answer, ask_meta, ask_chunks],
             )

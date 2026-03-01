@@ -3,6 +3,7 @@
 RAG prototype for answering health/critical-illness policy questions using:
 - PostgreSQL + `pgvector` retrieval
 - OpenAI embeddings + LLM answer generation
+- LangChain + LangGraph assistant orchestration
 - Ambiguity detection/clarification flow
 - FastAPI backend
 - Gradio frontend
@@ -15,7 +16,9 @@ The dataset in `data/policies/` is synthetic for demo/testing.
 - Vector or hybrid (vector + keyword) retrieval with optional embedding rerank + LLM rerank
 - Clarifying-question behavior for ambiguous prompts
 - Grounded answers with chunk-id citations
-- DB-backed premium rating service + tool/function calling for rate quotes
+- Deterministic eligibility service
+- DB-backed premium rating service + quote service (eligibility-gated)
+- Agentic request routing across `rag`, `eligibility`, `quote`, and `rate` services
 - Batch evaluation + reporting scripts
 - API and UI for interactive usage
 
@@ -59,6 +62,8 @@ notes/                      # Project notes and experiment logs
 src/
   api/
     app.py                  # FastAPI service
+  assistant/
+    orchestrator.py         # LangGraph assistant/router orchestration
   core/
     config.py               # Config loader + defaults + deep merge
     chunking.py             # Chunking logic
@@ -74,6 +79,8 @@ src/
       auto_merging_retriever.py   # Adjacent-chunk auto merge logic
       sentence_window_retriever.py # Sentence-window selection logic
   services/
+    eligibility_service.py  # Deterministic eligibility rules
+    quote_service.py        # Eligibility-gated quote generation
     rate_service.py         # DB-backed premium rating logic
     seed_rates.py           # Create/seed rate tables
   pipelines/
@@ -235,6 +242,9 @@ Endpoints:
 - `GET /health`
 - `POST /retrieve`
 - `POST /ask`
+- `POST /assistant/ask`
+- `POST /eligibility/check`
+- `POST /quote/generate`
 - `POST /rates/quote`
 
 Example:
@@ -249,11 +259,25 @@ Premium quote API example:
 Invoke-RestMethod http://127.0.0.1:8000/rates/quote -Method Post -ContentType "application/json" -Body '{"age":42,"smoker":false,"riders":["early_stage_cancer"]}'
 ```
 
-Tool-calling example via `/ask`:
+Eligibility API example:
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8000/ask -Method Post -ContentType "application/json" -Body '{"question":"What is my monthly premium if I am 42, non-smoker, with early-stage cancer rider?"}'
+Invoke-RestMethod http://127.0.0.1:8000/eligibility/check -Method Post -ContentType "application/json" -Body '{"age":42,"has_preexisting_condition":false,"currently_hospitalized":false}'
 ```
+
+Quote API example (eligibility-gated):
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/quote/generate -Method Post -ContentType "application/json" -Body '{"age":42,"smoker":false,"riders":["early_stage_cancer"]}'
+```
+
+Assistant routing example via `/assistant/ask`:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/assistant/ask -Method Post -ContentType "application/json" -Body '{"session_id":"demo-user-1","question":"What is my monthly premium if I am 42, non-smoker, with early-stage cancer rider?","include_service_result":true}'
+```
+
+Tip: pass the same `session_id` across turns so the assistant can reuse previously provided profile fields (for example age/smoker).
 
 ## OpenTelemetry
 
@@ -281,6 +305,7 @@ venv\Scripts\python scripts\gradio_app.py --host 127.0.0.1 --port 7860
 Open: `http://127.0.0.1:7860`
 
 Tabs:
+- `Assistant`: agentic routing (`rag` / `eligibility` / `quote` / `rate`) with service payload visibility
 - `Ask`: full QA flow
 - `Retrieve`: retrieval-only debugging view
 
