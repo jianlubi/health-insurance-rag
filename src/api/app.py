@@ -1,48 +1,38 @@
 from __future__ import annotations
 
-import json
-import os
-import re
-from typing import Any
+from typing import Any, Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from core.openai_client import create_openai_client
-from core.telemetry import get_tracer, instrument_fastapi_app, setup_telemetry
-from rag.ambiguity import build_clarification_prompt, needs_clarification
-from rag.answer import SYSTEM_PROMPT, build_context
-from rag.citation import ensure_chunk_citation
+from assistant.orchestrator import remember_session_profile, run_insurance_assistant
 from core.config import get_config
+from core.telemetry import get_tracer, instrument_fastapi_app, setup_telemetry
+from rag.retrieve import retrieve_chunks
+from services.eligibility_service import check_eligibility
+from services.quote_service import generate_quote
 from services.rate_service import (
     BASE_BENEFIT_AMOUNT,
     DEFAULT_POLICY_ID,
-    coerce_smoker,
     get_rate_quote,
 )
-from rag.retrieve import retrieve_chunks
 
 
 load_dotenv()
 CFG = get_config()
 RETRIEVAL_CFG = CFG["retrieval"]
 MODELS_CFG = CFG["models"]
-APP_VERSION = "0.1.0"
-_RATE_QUESTION_PATTERN = re.compile(
-    r"\b(premium|quote|cost|pricing|monthly payment|smoker|non-smoker|rider)\b",
-    re.IGNORECASE,
-)
+APP_VERSION = "0.2.0"
 
-setup_telemetry(
-    service_version=APP_VERSION,
-)
+setup_telemetry(service_version=APP_VERSION)
 
 app = FastAPI(
-    title="Health Insurance RAG API",
+    title="Health Insurance AI Assistant API",
     version=APP_VERSION,
     description=(
-        "HTTP API for retrieval-based policy Q&A and DB-backed premium rate quotes."
+        "Insurance AI assistant API with LangGraph routing across "
+        "RAG, eligibility checks, quotes, and rate lookups."
     ),
 )
 instrument_fastapi_app(app)
@@ -51,6 +41,10 @@ tracer = get_tracer(__name__, APP_VERSION)
 
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, description="User question.")
+    session_id: str | None = Field(
+        default=None,
+        description="Optional session id to retain profile fields across turns.",
+    )
     top_k: int = Field(default=int(RETRIEVAL_CFG["top_k"]), ge=1, le=20)
     candidate_k: int = Field(default=int(RETRIEVAL_CFG["candidate_k"]), ge=1, le=100)
     use_hybrid_search: bool = bool(RETRIEVAL_CFG["use_hybrid_search"])
@@ -80,6 +74,7 @@ class AskRequest(BaseModel):
     )
     model: str = str(MODELS_CFG["answer_model"])
     include_chunks: bool = False
+    include_service_result: bool = False
 
 
 class RetrieveRequest(BaseModel):
@@ -154,6 +149,7 @@ class RetrieveResponse(BaseModel):
 
 class AskResponse(BaseModel):
     question: str
+    route: Literal["rag", "eligibility", "quote", "rate"]
     answer: str
     needs_clarification: bool
     top_k: int
@@ -172,6 +168,17 @@ class AskResponse(BaseModel):
     use_sentence_window: bool
     sentence_window_size: int
     retrieved_count: int
+    service_result: dict[str, Any] | None = None
+    chunks: list[ChunkResult] | None = None
+
+
+class AssistantAskResponse(BaseModel):
+    question: str
+    route: Literal["rag", "eligibility", "quote", "rate"]
+    answer: str
+    needs_clarification: bool
+    retrieved_count: int
+    service_result: dict[str, Any] | None = None
     chunks: list[ChunkResult] | None = None
 
 
@@ -199,9 +206,38 @@ class RateQuoteResponse(BaseModel):
     assumptions: dict[str, Any]
 
 
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+class EligibilityCheckRequest(BaseModel):
+    age: int = Field(..., ge=0)
+    has_preexisting_condition: bool = False
+    currently_hospitalized: bool = False
+    policy_id: str = Field(default=DEFAULT_POLICY_ID, min_length=1)
+    session_id: str | None = None
+
+
+class EligibilityCheckResponse(BaseModel):
+    policy_id: str
+    age: int
+    eligible: bool
+    reasons: list[str]
+    evaluated_rules: list[dict[str, Any]]
+
+
+class QuoteRequest(BaseModel):
+    age: int = Field(..., ge=0)
+    smoker: bool
+    riders: list[str] = Field(default_factory=list)
+    benefit_amount: float = Field(default=float(BASE_BENEFIT_AMOUNT), gt=0)
+    has_preexisting_condition: bool = False
+    currently_hospitalized: bool = False
+    policy_id: str = Field(default=DEFAULT_POLICY_ID, min_length=1)
+    session_id: str | None = None
+
+
+class QuoteResponse(BaseModel):
+    status: Literal["quoted", "rejected"]
+    message: str
+    eligibility: EligibilityCheckResponse
+    rate_quote: RateQuoteResponse | None = None
 
 
 def _validate_question(question: str) -> str:
@@ -211,7 +247,7 @@ def _validate_question(question: str) -> str:
     return q
 
 
-def _map_chunk(raw: dict) -> ChunkResult:
+def _map_chunk(raw: dict[str, Any]) -> ChunkResult:
     meta = raw["metadata"]
     return ChunkResult(
         id=raw["id"],
@@ -232,207 +268,29 @@ def _map_chunk(raw: dict) -> ChunkResult:
     )
 
 
-def _should_use_rate_tool(question: str) -> bool:
-    return bool(_RATE_QUESTION_PATTERN.search(question))
+def _assistant_retrieval_options(payload: AskRequest) -> dict[str, Any]:
+    return {
+        "top_k": payload.top_k,
+        "candidate_k": payload.candidate_k,
+        "use_hybrid_search": payload.use_hybrid_search,
+        "keyword_candidate_k": payload.keyword_candidate_k,
+        "hybrid_alpha": payload.hybrid_alpha,
+        "hybrid_rrf_k": payload.hybrid_rrf_k,
+        "use_rerank": payload.use_rerank,
+        "use_llm_rerank": payload.use_llm_rerank,
+        "llm_rerank_candidate_k": payload.llm_rerank_candidate_k,
+        "llm_rerank_keep_k": payload.llm_rerank_keep_k,
+        "use_auto_merging": payload.use_auto_merging,
+        "auto_merge_max_gap": payload.auto_merge_max_gap,
+        "auto_merge_max_chunks": payload.auto_merge_max_chunks,
+        "use_sentence_window": payload.use_sentence_window,
+        "sentence_window_size": payload.sentence_window_size,
+    }
 
 
-def _answer_with_chunks(question: str, chunks: list[dict], model: str) -> str:
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
-        raise ValueError("OPENAI_API_KEY is required")
-
-    is_rate_question = _should_use_rate_tool(question)
-    if not chunks and not is_rate_question:
-        return "No relevant chunks found."
-
-    context = (
-        build_context(chunks)
-        if chunks
-        else "No policy context retrieved for this request."
-    )
-    client = create_openai_client(api_key=openai_api_key)
-    if not is_rate_question:
-        with tracer.start_as_current_span("openai.answer_completion"):
-            completion = client.chat.completions.create(
-                model=str(model),
-                temperature=0,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": SYSTEM_PROMPT,
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Question:\n{question}\n\nContext:\n{context}",
-                    },
-                ],
-            )
-        raw = (completion.choices[0].message.content or "").strip()
-        return ensure_chunk_citation(raw, chunks)
-
-    tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": "get_rate_quote",
-                "description": (
-                    "Get a monthly premium quote from database rate tables "
-                    "using customer profile fields."
-                ),
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "age": {"type": "integer", "minimum": 0},
-                        "smoker": {
-                            "type": "string",
-                            "description": (
-                                "Smoking status. Use one of: smoker, non-smoker, "
-                                "true, false."
-                            ),
-                        },
-                        "riders": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": (
-                                "Selected riders. Example values: "
-                                "early_stage_cancer, return_of_premium."
-                            ),
-                        },
-                        "benefit_amount": {
-                            "type": "number",
-                            "minimum": 0.01,
-                            "description": (
-                                "Requested benefit amount. "
-                                f"Default is {int(BASE_BENEFIT_AMOUNT)}."
-                            ),
-                        },
-                        "policy_id": {
-                            "type": "string",
-                            "description": (
-                                "Policy id for rating tables. "
-                                f"Default is {DEFAULT_POLICY_ID}."
-                            ),
-                        },
-                    },
-                    "required": ["age", "smoker"],
-                },
-            },
-        }
-    ]
-
-    messages: list[dict[str, Any]] = [
-        {
-            "role": "system",
-            "content": (
-                SYSTEM_PROMPT
-                + " For premium/rate quote questions, you must call the "
-                "get_rate_quote function and use its result as the source of truth. "
-                "Do not compute premiums from the policy document text. "
-                f"If benefit amount is missing, assume {int(BASE_BENEFIT_AMOUNT)}. "
-                "If required rating inputs are missing, ask a concise follow-up question."
-            ),
-        },
-        {
-            "role": "user",
-            "content": f"Question:\n{question}\n\nContext:\n{context}",
-        },
-    ]
-
-    tool_called = False
-    for _ in range(3):
-        with tracer.start_as_current_span("openai.rate_tool_step"):
-            completion = client.chat.completions.create(
-                model=str(model),
-                temperature=0,
-                messages=messages,
-                tools=tools,
-                tool_choice="auto",
-            )
-        message = completion.choices[0].message
-
-        if not message.tool_calls:
-            raw = (message.content or "").strip()
-            if tool_called:
-                return raw
-            if raw:
-                return raw
-            return (
-                "I can provide a premium quote from the rating service, "
-                "but I need at least age and smoker status."
-            )
-
-        tool_calls_payload: list[dict[str, Any]] = []
-        for tool_call in message.tool_calls:
-            tool_calls_payload.append(
-                {
-                    "id": tool_call.id,
-                    "type": "function",
-                    "function": {
-                        "name": tool_call.function.name,
-                        "arguments": tool_call.function.arguments or "{}",
-                    },
-                }
-            )
-        messages.append(
-            {
-                "role": "assistant",
-                "content": message.content or "",
-                "tool_calls": tool_calls_payload,
-            }
-        )
-
-        for tool_call in message.tool_calls:
-            tool_name = tool_call.function.name
-            args_raw = tool_call.function.arguments or "{}"
-            try:
-                args = json.loads(args_raw)
-            except json.JSONDecodeError:
-                args = {}
-
-            if tool_name != "get_rate_quote":
-                tool_result: dict[str, Any] = {
-                    "error": f"unsupported tool '{tool_name}'"
-                }
-            else:
-                try:
-                    with tracer.start_as_current_span("rate_service.get_rate_quote"):
-                        age = int(args["age"])
-                        smoker = coerce_smoker(args["smoker"])
-                        riders_raw = args.get("riders", [])
-                        if isinstance(riders_raw, str):
-                            riders = [riders_raw]
-                        elif isinstance(riders_raw, list):
-                            riders = [str(item) for item in riders_raw]
-                        else:
-                            raise ValueError("riders must be a list of strings")
-                        benefit_amount = float(
-                            args.get("benefit_amount", BASE_BENEFIT_AMOUNT)
-                        )
-                        policy_id = str(args.get("policy_id", DEFAULT_POLICY_ID))
-                        tool_result = get_rate_quote(
-                            age=age,
-                            smoker=smoker,
-                            riders=riders,
-                            benefit_amount=benefit_amount,
-                            policy_id=policy_id,
-                        )
-                except KeyError:
-                    tool_result = {
-                        "error": "missing required inputs: age and smoker are required"
-                    }
-                except Exception as exc:
-                    tool_result = {"error": str(exc)}
-
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": json.dumps(tool_result),
-                }
-            )
-            tool_called = True
-
-    return "I could not complete the rate lookup. Please try again."
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
 
 
 @app.post("/rates/quote", response_model=RateQuoteResponse)
@@ -451,6 +309,74 @@ def quote_rate(payload: RateQuoteRequest) -> RateQuoteResponse:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"rate quote failed: {exc}") from exc
     return RateQuoteResponse(**quote)
+
+
+@app.post("/eligibility/check", response_model=EligibilityCheckResponse)
+def check_policy_eligibility(payload: EligibilityCheckRequest) -> EligibilityCheckResponse:
+    try:
+        with tracer.start_as_current_span("eligibility_service.check_api"):
+            result = check_eligibility(
+                age=payload.age,
+                has_preexisting_condition=payload.has_preexisting_condition,
+                currently_hospitalized=payload.currently_hospitalized,
+                policy_id=payload.policy_id,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"eligibility check failed: {exc}") from exc
+    if payload.session_id:
+        remember_session_profile(
+            payload.session_id,
+            {
+                "age": payload.age,
+                "policy_id": payload.policy_id,
+                "has_preexisting_condition": payload.has_preexisting_condition,
+                "currently_hospitalized": payload.currently_hospitalized,
+            },
+        )
+    return EligibilityCheckResponse(**result)
+
+
+@app.post("/quote/generate", response_model=QuoteResponse)
+def generate_policy_quote(payload: QuoteRequest) -> QuoteResponse:
+    try:
+        with tracer.start_as_current_span("quote_service.generate_api"):
+            result = generate_quote(
+                age=payload.age,
+                smoker=payload.smoker,
+                riders=payload.riders,
+                benefit_amount=payload.benefit_amount,
+                has_preexisting_condition=payload.has_preexisting_condition,
+                currently_hospitalized=payload.currently_hospitalized,
+                policy_id=payload.policy_id,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"quote generation failed: {exc}") from exc
+    if payload.session_id:
+        remember_session_profile(
+            payload.session_id,
+            {
+                "age": payload.age,
+                "smoker": payload.smoker,
+                "riders": payload.riders,
+                "benefit_amount": payload.benefit_amount,
+                "policy_id": payload.policy_id,
+                "has_preexisting_condition": payload.has_preexisting_condition,
+                "currently_hospitalized": payload.currently_hospitalized,
+            },
+        )
+
+    return QuoteResponse(
+        status=result["status"],
+        message=result["message"],
+        eligibility=EligibilityCheckResponse(**result["eligibility"]),
+        rate_quote=(
+            RateQuoteResponse(**result["rate_quote"]) if result.get("rate_quote") else None
+        ),
+    )
 
 
 @app.post("/retrieve", response_model=RetrieveResponse)
@@ -509,76 +435,64 @@ def retrieve(payload: RetrieveRequest) -> RetrieveResponse:
     )
 
 
+@app.post("/assistant/ask", response_model=AssistantAskResponse)
+def assistant_ask(payload: AskRequest) -> AssistantAskResponse:
+    question = _validate_question(payload.question)
+    try:
+        with tracer.start_as_current_span("assistant.ask_endpoint"):
+            result = run_insurance_assistant(
+                question=question,
+                model=str(payload.model),
+                session_id=payload.session_id,
+                retrieval_options=_assistant_retrieval_options(payload),
+                include_chunks=True,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"assistant failed: {exc}") from exc
+
+    mapped = [_map_chunk(c) for c in list(result.get("chunks") or [])]
+    route = str(result.get("route") or "rag")
+    if route not in {"rag", "eligibility", "quote", "rate"}:
+        route = "rag"
+    return AssistantAskResponse(
+        question=question,
+        route=route,  # type: ignore[arg-type]
+        answer=str(result.get("answer") or ""),
+        needs_clarification=bool(result.get("needs_clarification") or False),
+        retrieved_count=len(mapped),
+        service_result=result.get("service_result") if payload.include_service_result else None,
+        chunks=mapped if payload.include_chunks else None,
+    )
+
+
 @app.post("/ask", response_model=AskResponse)
 def ask(payload: AskRequest) -> AskResponse:
     question = _validate_question(payload.question)
-    is_rate_question = _should_use_rate_tool(question)
-
-    if needs_clarification(question):
-        answer = build_clarification_prompt(question)
-        return AskResponse(
-            question=question,
-            answer=answer,
-            needs_clarification=True,
-            top_k=payload.top_k,
-            candidate_k=payload.candidate_k,
-            use_hybrid_search=payload.use_hybrid_search,
-            keyword_candidate_k=payload.keyword_candidate_k,
-            hybrid_alpha=payload.hybrid_alpha,
-            hybrid_rrf_k=payload.hybrid_rrf_k,
-            use_rerank=payload.use_rerank,
-            use_llm_rerank=payload.use_llm_rerank,
-            llm_rerank_candidate_k=payload.llm_rerank_candidate_k,
-            llm_rerank_keep_k=payload.llm_rerank_keep_k,
-            use_auto_merging=payload.use_auto_merging,
-            auto_merge_max_gap=payload.auto_merge_max_gap,
-            auto_merge_max_chunks=payload.auto_merge_max_chunks,
-            use_sentence_window=payload.use_sentence_window,
-            sentence_window_size=payload.sentence_window_size,
-            retrieved_count=0,
-            chunks=[] if payload.include_chunks else None,
-        )
-
     try:
-        with tracer.start_as_current_span("rag.ask_endpoint") as span:
-            span.set_attribute("rag.top_k", payload.top_k)
-            span.set_attribute("rag.candidate_k", payload.candidate_k)
-            span.set_attribute("rag.use_hybrid_search", payload.use_hybrid_search)
-            span.set_attribute("rag.use_rerank", payload.use_rerank)
-            span.set_attribute("rag.use_llm_rerank", payload.use_llm_rerank)
-            span.set_attribute("rag.is_rate_question", is_rate_question)
-            if is_rate_question:
-                chunks: list[dict] = []
-            else:
-                chunks = retrieve_chunks(
-                    question,
-                    top_k=payload.top_k,
-                    candidate_k=payload.candidate_k,
-                    use_hybrid_search=payload.use_hybrid_search,
-                    keyword_candidate_k=payload.keyword_candidate_k,
-                    hybrid_alpha=payload.hybrid_alpha,
-                    hybrid_rrf_k=payload.hybrid_rrf_k,
-                    use_rerank=payload.use_rerank,
-                    use_llm_rerank=payload.use_llm_rerank,
-                    llm_rerank_candidate_k=payload.llm_rerank_candidate_k,
-                    llm_rerank_keep_k=payload.llm_rerank_keep_k,
-                    use_auto_merging=payload.use_auto_merging,
-                    auto_merge_max_gap=payload.auto_merge_max_gap,
-                    auto_merge_max_chunks=payload.auto_merge_max_chunks,
-                    use_sentence_window=payload.use_sentence_window,
-                    sentence_window_size=payload.sentence_window_size,
-                )
-            answer = _answer_with_chunks(question, chunks, payload.model)
+        with tracer.start_as_current_span("assistant.ask_compat_endpoint"):
+            result = run_insurance_assistant(
+                question=question,
+                model=str(payload.model),
+                session_id=payload.session_id,
+                retrieval_options=_assistant_retrieval_options(payload),
+                include_chunks=True,
+            )
     except ValueError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"answering failed: {exc}") from exc
 
-    mapped = [_map_chunk(c) for c in chunks]
+    mapped = [_map_chunk(c) for c in list(result.get("chunks") or [])]
+    route = str(result.get("route") or "rag")
+    if route not in {"rag", "eligibility", "quote", "rate"}:
+        route = "rag"
     return AskResponse(
         question=question,
-        answer=answer,
-        needs_clarification=False,
+        route=route,  # type: ignore[arg-type]
+        answer=str(result.get("answer") or ""),
+        needs_clarification=bool(result.get("needs_clarification") or False),
         top_k=payload.top_k,
         candidate_k=payload.candidate_k,
         use_hybrid_search=payload.use_hybrid_search,
@@ -595,6 +509,6 @@ def ask(payload: AskRequest) -> AskResponse:
         use_sentence_window=payload.use_sentence_window,
         sentence_window_size=payload.sentence_window_size,
         retrieved_count=len(mapped),
+        service_result=result.get("service_result") if payload.include_service_result else None,
         chunks=mapped if payload.include_chunks else None,
     )
-
