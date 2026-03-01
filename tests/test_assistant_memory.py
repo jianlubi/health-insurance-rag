@@ -47,6 +47,7 @@ class AssistantMemoryTests(unittest.TestCase):
                 "evaluated_rules": [],
             },
             "rate_quote": {"monthly_premium": 42.0},
+            "application_url": "http://127.0.0.1:8000/application/complete?age=42&smoker=false",
         }
 
         result = run_insurance_assistant(
@@ -57,6 +58,7 @@ class AssistantMemoryTests(unittest.TestCase):
         )
 
         self.assertIn("Quote generated successfully", result["answer"])
+        self.assertIn("Complete your application", result["answer"])
         self.assertEqual(mock_generate_quote.call_count, 1)
         kwargs = mock_generate_quote.call_args.kwargs
         self.assertEqual(kwargs["age"], 42)
@@ -101,6 +103,7 @@ class AssistantMemoryTests(unittest.TestCase):
                 "evaluated_rules": [],
             },
             "rate_quote": {"monthly_premium": 42.0},
+            "application_url": "http://127.0.0.1:8000/application/complete?age=42&smoker=false",
         }
 
         first = run_insurance_assistant(
@@ -119,6 +122,7 @@ class AssistantMemoryTests(unittest.TestCase):
             include_chunks=False,
         )
         self.assertIn("Quote generated successfully", second["answer"])
+        self.assertIn("Complete your application", second["answer"])
         self.assertEqual(second["route"], "quote")
         self.assertEqual(mock_generate_quote.call_count, 1)
         kwargs = mock_generate_quote.call_args.kwargs

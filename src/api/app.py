@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from html import escape
 from typing import Any, Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from assistant.orchestrator import remember_session_profile, run_insurance_assistant
@@ -238,6 +240,7 @@ class QuoteResponse(BaseModel):
     message: str
     eligibility: EligibilityCheckResponse
     rate_quote: RateQuoteResponse | None = None
+    application_url: str | None = None
 
 
 def _validate_question(question: str) -> str:
@@ -376,7 +379,91 @@ def generate_policy_quote(payload: QuoteRequest) -> QuoteResponse:
         rate_quote=(
             RateQuoteResponse(**result["rate_quote"]) if result.get("rate_quote") else None
         ),
+        application_url=result.get("application_url"),
     )
+
+
+@app.get("/application/complete", response_class=HTMLResponse)
+def complete_application_page(
+    age: int | None = Query(default=None, ge=0),
+    smoker: bool | None = None,
+    riders: str | None = None,
+    benefit_amount: float | None = Query(default=None, gt=0),
+    policy_id: str | None = None,
+    has_preexisting_condition: bool | None = None,
+    currently_hospitalized: bool | None = None,
+) -> HTMLResponse:
+    rider_values = [item.strip() for item in str(riders or "").split(",") if item.strip()]
+    rider_text = ", ".join(rider_values) if rider_values else ""
+
+    def _safe(value: Any) -> str:
+        return escape(str(value if value is not None else ""))
+
+    html = f"""
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Complete Your Application</title>
+    <style>
+      body {{ font-family: Arial, sans-serif; margin: 0; background: #f4f6fb; color: #111827; }}
+      .wrap {{ max-width: 760px; margin: 40px auto; background: #fff; border: 1px solid #dbe2f0; border-radius: 12px; padding: 24px; }}
+      h1 {{ margin-top: 0; font-size: 28px; }}
+      p {{ line-height: 1.5; }}
+      .note {{ padding: 12px; border-radius: 8px; background: #eff6ff; border: 1px solid #bfdbfe; margin: 16px 0 22px; }}
+      form {{ display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }}
+      label {{ display: block; font-size: 13px; margin-bottom: 6px; color: #374151; }}
+      input {{ width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; }}
+      .full {{ grid-column: 1 / -1; }}
+      button {{ margin-top: 8px; padding: 12px 16px; border: 0; border-radius: 8px; background: #0f766e; color: #fff; cursor: pointer; }}
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <h1>Complete your application</h1>
+      <p class="note">
+        This page is pre-populated with the information you provided during quote generation.
+        Please review the details below and complete your application on this page.
+      </p>
+      <form>
+        <div>
+          <label for="age">Age</label>
+          <input id="age" name="age" value="{_safe(age)}" />
+        </div>
+        <div>
+          <label for="smoker">Smoker</label>
+          <input id="smoker" name="smoker" value="{_safe(smoker)}" />
+        </div>
+        <div>
+          <label for="benefit_amount">Benefit Amount</label>
+          <input id="benefit_amount" name="benefit_amount" value="{_safe(benefit_amount)}" />
+        </div>
+        <div>
+          <label for="policy_id">Policy ID</label>
+          <input id="policy_id" name="policy_id" value="{_safe(policy_id)}" />
+        </div>
+        <div class="full">
+          <label for="riders">Riders</label>
+          <input id="riders" name="riders" value="{_safe(rider_text)}" />
+        </div>
+        <div>
+          <label for="has_preexisting_condition">Has Pre-existing Condition</label>
+          <input id="has_preexisting_condition" name="has_preexisting_condition" value="{_safe(has_preexisting_condition)}" />
+        </div>
+        <div>
+          <label for="currently_hospitalized">Currently Hospitalized</label>
+          <input id="currently_hospitalized" name="currently_hospitalized" value="{_safe(currently_hospitalized)}" />
+        </div>
+        <div class="full">
+          <button type="button">Continue Application</button>
+        </div>
+      </form>
+    </main>
+  </body>
+</html>
+"""
+    return HTMLResponse(content=html)
 
 
 @app.post("/retrieve", response_model=RetrieveResponse)

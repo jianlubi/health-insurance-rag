@@ -447,7 +447,7 @@ def build_demo() -> gr.Blocks:
             assistant_btn = gr.Button("Run Assistant")
 
             assistant_route = gr.Textbox(label="Route")
-            assistant_answer = gr.Textbox(label="Answer", lines=10)
+            assistant_answer = gr.Markdown()
             assistant_meta = gr.Code(label="Metadata", language="json")
             assistant_service = gr.Code(label="Service Result", language="json")
             assistant_chunks = gr.Dataframe(
@@ -617,7 +617,7 @@ def build_demo() -> gr.Blocks:
             )
             ask_btn = gr.Button("Ask")
 
-            ask_answer = gr.Textbox(label="Answer", lines=10)
+            ask_answer = gr.Markdown()
             ask_meta = gr.Code(label="Metadata", language="json")
             ask_chunks = gr.Dataframe(
                 headers=CHUNK_HEADERS,
