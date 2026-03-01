@@ -1,10 +1,19 @@
 # Health Insurance RAG
 
-RAG prototype for answering health/critical-illness policy questions using:
+Health insurance assistant with two core parts:
+
+1. **Policy Q&A (RAG)**
+   - Answer policy questions using retrieval-augmented generation over policy documents.
+   - Uses configurable chunking/retrieval strategies such as section-aware chunks, auto-merging adjacent chunks, and sentence-window retrieval.
+
+2. **Get a Quote (Agentic AI)**
+   - Uses an agentic assistant that routes requests to three tools: `rate`, `eligibility`, and `quote`.
+   - Supports a guided flow: identify missing user info, run eligibility checks, then process the quote.
+
+Built with:
 - PostgreSQL + `pgvector` retrieval
 - OpenAI embeddings + LLM answer generation
 - LangChain + LangGraph assistant orchestration
-- Ambiguity detection/clarification flow
 - FastAPI backend
 - Gradio frontend
 
@@ -12,12 +21,13 @@ The dataset in `data/policies/` is synthetic for demo/testing.
 
 ## Features
 
-- Section-aware markdown chunking
+- Two-part experience: **Policy Q&A** + **Get a Quote**
+- Section-aware markdown chunking with optional auto-merging and sentence-window retrieval strategies
 - Vector or hybrid (vector + keyword) retrieval with optional embedding rerank + LLM rerank
 - Clarifying-question behavior for ambiguous prompts
 - Grounded answers with chunk-id citations
-- Deterministic eligibility service
-- DB-backed premium rating service + quote service (eligibility-gated)
+- Agentic quote workflow with three tools: `rate`, `eligibility`, `quote`
+- Deterministic eligibility service + DB-backed premium rating + eligibility-gated quote generation
 - Agentic request routing across `rag`, `eligibility`, `quote`, and `rate` services
 - Batch evaluation + reporting scripts
 - API and UI for interactive usage
@@ -40,6 +50,24 @@ From `data/eval/eval_results.jsonl` (latest run):
 ### Gradio Retrieve
 
 ![Gradio Retrieve](docs/images/gradio-retrieve.png)
+
+### Quote Flow
+
+#### 1. Missing Info Prompt
+
+![Quote Flow Step 1](docs/images/quote-flow-step-1-missing-info.png)
+
+#### 2. Eligibility Check
+
+![Quote Flow Step 2](docs/images/quote-flow-step-2-eligibility.png)
+
+#### 3. Quote Processed
+
+![Quote Flow Step 3](docs/images/quote-flow-step-3-quote-generated.png)
+
+#### 4. Ineligible Quote Request (Rejected)
+
+![Quote Flow Step 4](docs/images/quote-flow-step-4-ineligible-rejected.png)
 
 ### Eval Report
 

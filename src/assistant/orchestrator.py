@@ -299,9 +299,16 @@ def _format_quote_answer(result: dict[str, Any]) -> str:
         reason_text = "; ".join(str(r) for r in reasons) if reasons else "eligibility failed"
         return f"Quote rejected: {reason_text}."
     rate_quote = result.get("rate_quote") or {}
-    return (
+    answer = (
         f"Quote generated successfully. Estimated monthly premium: "
         f"${rate_quote.get('monthly_premium')} USD."
+    )
+    application_url = str(result.get("application_url") or "").strip()
+    if not application_url:
+        return answer
+    return (
+        f"{answer}\n\n"
+        f"[Complete your application]({application_url})"
     )
 
 

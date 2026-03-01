@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 import unittest
+from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 
@@ -27,6 +28,7 @@ class QuoteServiceTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "rejected")
         self.assertIsNone(result["rate_quote"])
+        self.assertIsNone(result["application_url"])
         self.assertFalse(result["eligibility"]["eligible"])
         mock_get_rate_quote.assert_not_called()
 
@@ -64,9 +66,15 @@ class QuoteServiceTests(unittest.TestCase):
         self.assertEqual(result["status"], "quoted")
         self.assertTrue(result["eligibility"]["eligible"])
         self.assertIsNotNone(result["rate_quote"])
+        self.assertTrue(result["application_url"])
+        parsed = urlparse(str(result["application_url"]))
+        self.assertEqual(parsed.path, "/application/complete")
+        params = parse_qs(parsed.query)
+        self.assertEqual(params.get("age"), ["42"])
+        self.assertEqual(params.get("smoker"), ["false"])
+        self.assertEqual(params.get("riders"), ["early_stage_cancer"])
         mock_get_rate_quote.assert_called_once()
 
 
 if __name__ == "__main__":
     unittest.main()
-
