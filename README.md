@@ -22,33 +22,37 @@ The dataset in `data/policies/` is synthetic for demo/testing.
 ## System Diagram
 
 ```mermaid
-flowchart LR
-    U[User]
-    UI[Gradio UI / FastAPI Client]
-    API[FastAPI API]
-    ORCH[LangGraph Orchestrator]
+flowchart LR;
+    U["User"];
+    UI["Gradio UI / FastAPI Client"];
+    API["FastAPI API"];
+    ORCH["LangGraph Orchestrator"];
 
-    U --> UI --> API --> ORCH
+    U --> UI;
+    UI --> API;
+    API --> ORCH;
 
-    ORCH -->|Policy Q&A route| RAG[Policy Q&A (RAG)]
-    ORCH -->|Get a Quote route| AGENT[Agentic Quote Flow]
+    ORCH -->|Policy QA route| RAG["Policy QA (RAG)"];
+    ORCH -->|Get a Quote route| AGENT["Agentic Quote Flow"];
 
-    RAG --> RETRIEVE[Retriever + Chunking Strategies\n(section-aware / auto-merge / sentence-window)]
-    RETRIEVE --> VDB[(Postgres + pgvector)]
-    RETRIEVE --> POLICY[(Policy Markdown Chunks)]
-    RAG --> LLM[LLM Answer Generation]
+    RAG --> RETRIEVE["Retriever + Chunking Strategies<br/>section-aware / auto-merge / sentence-window"];
+    RETRIEVE --> VDB[("Postgres + pgvector")];
+    RETRIEVE --> POLICY[("Policy Markdown Chunks")];
+    RAG --> LLM["LLM Answer Generation"];
 
-    AGENT --> ELIG[Tool: eligibility]
-    AGENT --> RATE[Tool: rate]
-    AGENT --> QUOTE[Tool: quote]
-    QUOTE -->|calls| ELIG
-    QUOTE -->|calls (if eligible)| RATE
+    AGENT --> ELIG["Tool: eligibility"];
+    AGENT --> RATE["Tool: rate"];
+    AGENT --> QUOTE["Tool: quote"];
+    QUOTE -->|calls| ELIG;
+    QUOTE -->|calls if eligible| RATE;
 
-    LLM --> RESP[Assistant Response]
-    QUOTE --> RESP
-    RATE --> RESP
-    ELIG --> RESP
-    RESP --> API --> UI --> U
+    LLM --> RESP["Assistant Response"];
+    QUOTE --> RESP;
+    RATE --> RESP;
+    ELIG --> RESP;
+    RESP --> API;
+    API --> UI;
+    UI --> U;
 ```
 
 ## Screenshots
