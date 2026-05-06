@@ -106,6 +106,7 @@ flowchart LR;
 - Deterministic eligibility service + DB-backed premium rating + eligibility-gated quote generation
 - Agentic request routing across `rag`, `eligibility`, `quote`, and `rate` services
 - Batch evaluation + reporting scripts
+- DeepEval-based RAG quality evaluation (answer relevancy, faithfulness, contextual relevance/precision/recall)
 - Agent routing + tool correctness evaluation for `eligibility`, `rate`, and `quote`
 - API and UI for interactive usage
 
@@ -166,6 +167,7 @@ src/
     ingest.py               # Build chunks JSONL from policies
     index.py                # Embed + index chunks into pgvector
     eval.py                 # Batch evaluator
+    eval_deepeval.py        # DeepEval-based RAG evaluator
     report_eval.py          # Eval summary report
   ui/
     gradio_app.py           # Gradio frontend
@@ -298,6 +300,7 @@ venv\Scripts\python scripts\answer.py --top-k 6 "What illnesses are covered by t
 
 ```powershell
 venv\Scripts\python scripts\eval.py
+venv\Scripts\python scripts\eval_deepeval.py
 venv\Scripts\python scripts\report_eval.py
 venv\Scripts\python scripts\eval_agent.py
 ```
@@ -306,8 +309,14 @@ Example with custom eval settings:
 
 ```powershell
 venv\Scripts\python scripts\eval.py --top-k 6 --max-questions 60
+venv\Scripts\python scripts\eval_deepeval.py --top-k 6 --max-questions 60 --judge-model gpt-4.1
 venv\Scripts\python scripts\eval_agent.py --max-questions 12 --routing-mode fallback
 ```
+
+DeepEval notes:
+- `scripts/eval_deepeval.py` runs DeepEval metrics: `AnswerRelevancy`, `Faithfulness`, `ContextualRelevancy`, and (when `expected_output` is provided per question) `ContextualPrecision` + `ContextualRecall`.
+- Defaults are in `config.yaml` under `eval_deepeval`.
+- By default, `not_available` and `needs_clarification` cases are skipped (`--include-unanswerable` to include them).
 
 ## FastAPI Backend
 
