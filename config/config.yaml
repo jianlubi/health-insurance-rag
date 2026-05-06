@@ -46,6 +46,43 @@ eval_agent:
   output_path: data/eval/agent_eval_results.jsonl
   max_questions: 20
 
+eval_deepeval:
+  questions_path: data/eval/test_questions.json
+  output_path: data/eval/deepeval_results.jsonl
+  top_k: 4
+  max_questions: 60
+  judge_model: gpt-4o-mini
+  include_unanswerable: false
+  use_reference_metrics: true
+  verbose_metrics: false
+  metric_async_mode: false
+  faithfulness_truths_extraction_limit: 20
+  deepeval_retry_max_attempts: 3
+  deepeval_per_attempt_timeout_seconds: 60
+  deepeval_per_task_timeout_seconds: 220
+  timeout_fallback_enabled: true
+  timeout_fallback_max_context_items: 2
+  timeout_fallback_max_context_chars: 320
+  timeout_fallback_max_answer_chars: 420
+  compact_metric_answer: true
+  compact_metric_answer_max_sentences: 2
+  compact_metric_answer_max_chars: 360
+  rewrite_metric_answer: true
+  rewrite_metric_answer_model: gpt-4o-mini
+  rewrite_metric_answer_max_chars: 360
+  heuristic_faithfulness_fallback: true
+  use_rerank: true
+  use_sentence_window: true
+  sentence_window_size: 0
+  use_context_compression: true
+  compression_max_sentences: 2
+  compression_drop_irrelevant: true
+  answer_relevancy_threshold: 0.7
+  faithfulness_threshold: 0.7
+  contextual_relevancy_threshold: 0.7
+  contextual_precision_threshold: 0.7
+  contextual_recall_threshold: 0.7
+
 ingest:
   policies_dir: data/policies
   output_path: data/chunks/policy_chunks.jsonl
